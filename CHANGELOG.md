@@ -2,9 +2,56 @@
 
 All notable changes to SafeClaw will be documented in this file.
 
-Every huge milestone, we add something new. Next milestone: **100 stars.**
+Every huge milestone, we add something new. We just hit **100 stars!**
 
 ---
+
+## [0.3.0] - 2026-03-11 — 100-Star Milestone
+
+### Added
+- **Fuzzy Learning (Writing Style Profiler)** — Deterministic AI that learns HOW you write
+  - Analyzes sentence length, vocabulary, punctuation habits, tone, structure
+  - Builds a writing profile from your actual blog posts and text samples
+  - Auto-generates system prompt instructions matching your voice
+  - No LLM required — pure statistical text analysis
+  - Profile grows more accurate with each sample
+
+- **Non-Deterministic System Prompts** — Context-aware prompt builder
+  - Combines learned writing style + task type + topic + user preferences
+  - Different prompts for blog, research, coding, and general tasks
+  - Time-of-day context awareness
+  - Visual system architecture flow diagram (`flow` command)
+
+- **Cron Auto-Blogging (No LLM)** — Schedule blog posts on cron
+  - Fetches content from RSS feeds and crawled URLs
+  - Summarizes with sumy (extractive, zero AI cost)
+  - Three post templates: digest, single, curated
+  - Publishes to any configured target on schedule
+  - Configure via `auto_blogs` in config.yaml
+
+- **Two-Phase Research Pipeline**
+  - Phase 1 (Non-LLM, $0): Search RSS feeds, crawl URLs, summarize with sumy
+  - Phase 2 (LLM, optional): User selects favorite sources, LLM analyzes in depth
+  - Full session management: gather → select → analyze → results
+  - Uses research-specific LLM provider (per-task routing)
+
+- **Per-Task LLM Routing** — Different LLMs for different jobs
+  - Configure separate providers for blog, research, coding, and general
+  - `task_providers` section in config.yaml
+  - Fall back to default provider when task-specific not configured
+
+- **Coding Action** — Code tools with non-LLM and LLM modes
+  - Non-LLM (always free): templates, stats, search, diff, regex testing
+  - LLM (optional): generate, explain, review, refactor, document
+  - 7 built-in code templates (Python, FastAPI, HTML, Dockerfile, GitHub Action)
+  - Language detection for 40+ languages
+
+### Changed
+- Version bump to 0.3.0
+- Updated config.yaml with per-task routing, auto-blog, and new feature sections
+- Engine now initializes blog scheduler from config on startup
+- Blog action feeds user writing into style profiler automatically
+- Parser extended with research, code, style, autoblog, and flow intents
 
 ## [0.2.2] - 2026-02-24
 

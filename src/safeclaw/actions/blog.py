@@ -97,6 +97,14 @@ class BlogAction(BaseAction):
         # Initialize AI writer
         if config.get("ai_providers"):
             self.ai_writer = load_ai_writer_from_yaml(config)
+
+            # Apply per-task routing: use blog-specific provider if configured
+            task_providers = config.get("task_providers", {})
+            blog_provider = task_providers.get("blog")
+            if blog_provider and blog_provider in self.ai_writer.providers:
+                self.ai_writer.set_active_provider(blog_provider)
+                logger.info(f"Blog using task-specific provider: {blog_provider}")
+
             logger.info(
                 f"AI writer initialized with {len(self.ai_writer.providers)} provider(s)"
             )
@@ -1134,6 +1142,14 @@ class BlogAction(BaseAction):
 
         with open(draft_path, "a") as f:
             f.write(entry)
+
+        # Feed to writing style profiler (fuzzy learning)
+        if engine and hasattr(engine, "memory") and engine.memory:
+            try:
+                from safeclaw.core.writing_style import update_writing_profile
+                await update_writing_profile(engine.memory, user_id, content)
+            except Exception as e:
+                logger.debug(f"Style profiling skipped: {e}")
 
         # Count entries
         entry_count = self._count_entries(draft_path)

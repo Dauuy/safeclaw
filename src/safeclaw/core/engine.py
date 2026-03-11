@@ -29,6 +29,10 @@ class SafeClaw:
     - Scheduled triggers (cron, webhooks, file watchers)
     - Persistent memory (SQLite-based)
     - No GenAI required - uses rule-based parsing
+    - Fuzzy learning: deterministic writing style profiling
+    - Per-task LLM routing (blog, research, coding each get their own provider)
+    - Cron-based auto-blogging (no LLM)
+    - Non-deterministic system prompts (context-aware, learned from user)
     """
 
     def __init__(
@@ -49,6 +53,9 @@ class SafeClaw:
         self.parser = CommandParser()
         self.memory = Memory(self.data_dir / "memory.db")
         self.scheduler = Scheduler()
+
+        # Blog scheduler (initialized after config load)
+        self.blog_scheduler: Any = None
 
         # Event queue for async message processing
         self._message_queue: asyncio.Queue = asyncio.Queue()
@@ -273,6 +280,15 @@ class SafeClaw:
         await self.memory.initialize()
         await self.scheduler.start()
 
+        # Initialize blog scheduler from config (cron auto-blogging, no LLM)
+        if self.config.get("auto_blogs"):
+            try:
+                from safeclaw.core.blog_scheduler import BlogScheduler
+                self.blog_scheduler = BlogScheduler.from_config(self)
+                logger.info("Blog scheduler initialized")
+            except Exception as e:
+                logger.warning(f"Blog scheduler init failed: {e}")
+
         # Start all enabled channels
         channel_tasks = []
         for name, channel in self.channels.items():
@@ -325,5 +341,20 @@ class SafeClaw:
 
         for action in self.actions:
             help_lines.append(f"  • {action}")
+
+        help_lines.extend([
+            "",
+            "100-Star Features:",
+            "  • research <topic>     — Two-phase research (non-LLM + optional LLM deep dive)",
+            "  • code template <type> — Code generation (non-LLM templates + optional LLM)",
+            "  • style profile        — View your learned writing style profile",
+            "  • style learn          — Feed text to the writing style profiler",
+            "  • auto blog            — Configure cron-based auto-blogging (no LLM)",
+            "  • flow                 — Show system architecture flow diagram",
+            "",
+            "Per-task LLM routing:",
+            "  Configure different LLMs for blogging, research, and coding",
+            "  in config.yaml under task_providers.",
+        ])
 
         return "\n".join(help_lines)
