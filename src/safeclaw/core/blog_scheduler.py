@@ -126,10 +126,34 @@ class BlogScheduler:
         self._configs[config.name] = config
 
         if config.enabled:
-            # Register with APScheduler
+            # Verify scheduler uses AsyncIOScheduler (required for async cron jobs).
+            # A lambda wrapping an async function is NOT detected by
+            # inspect.iscoroutinefunction, so APScheduler would call it
+            # synchronously and silently discard the unawaited coroutine.
+            # We use a proper async def wrapper instead.
+            scheduler_impl = getattr(self.engine.scheduler, "_scheduler", None)
+            if scheduler_impl is not None:
+                cls_name = type(scheduler_impl).__name__
+                if "Async" not in cls_name:
+                    msg = (
+                        f"Auto-blog requires AsyncIOScheduler but found {cls_name}. "
+                        "Cron jobs that call async functions will silently fail. "
+                        "Switch to apscheduler.schedulers.asyncio.AsyncIOScheduler."
+                    )
+                    logger.error(msg)
+                    return f"Auto-blog '{config.name}' NOT scheduled: {msg}"
+
+            # Build a proper async callback so APScheduler detects it as
+            # a coroutine function (inspect.iscoroutinefunction returns True).
+            async def _cron_callback(
+                _self: "BlogScheduler" = self,
+                _cfg: AutoBlogConfig = config,
+            ) -> None:
+                await _self._execute_auto_blog(_cfg)
+
             self.engine.scheduler.add_cron(
                 name=f"autoblog_{config.name}",
-                func=lambda cfg=config: self._execute_auto_blog(cfg),
+                func=_cron_callback,
                 cron_expr=config.cron_expr,
             )
             logger.info(f"Scheduled auto-blog '{config.name}': {config.cron_expr}")

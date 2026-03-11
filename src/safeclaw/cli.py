@@ -40,7 +40,6 @@ from safeclaw.core.feeds import PRESET_FEEDS, FeedReader
 from safeclaw.core.prompt_builder import PromptBuilder
 from safeclaw.core.summarizer import Summarizer, SummaryMethod
 from safeclaw.core.writing_style import (
-    WritingStyleProfiler,
     load_writing_profile,
     update_writing_profile,
 )
