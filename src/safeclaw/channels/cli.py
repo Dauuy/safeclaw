@@ -91,7 +91,8 @@ class CLIChannel(BaseChannel):
                 self._display_response(response)
 
             except KeyboardInterrupt:
-                self.console.print("\n[dim]Interrupted. Type 'quit' to exit.[/dim]")
+                self.console.print("\n[dim]Goodbye![/dim]")
+                break
             except EOFError:
                 break
 
@@ -111,7 +112,8 @@ class CLIChannel(BaseChannel):
         self.console.print(prompt, end="")
 
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, sys.stdin.readline)
+        line = await loop.run_in_executor(None, sys.stdin.readline)
+        return line.strip()
 
     def _display_response(self, response: str) -> None:
         """Display response with formatting."""
