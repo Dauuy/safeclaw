@@ -140,16 +140,32 @@ class TelegramChannel(BaseChannel):
             return
 
         user_id = update.effective_user.id
+        text = update.message.text
+        no_allowlist = not self.allowed_users
 
-        if not self._is_allowed(user_id):
+        # Bootstrap: allow self-registration even when allowlist is empty
+        is_self_register = (
+            no_allowlist
+            and text.strip().lower() == "setup telegram allow me"
+        )
+
+        if not is_self_register and not self._is_allowed(user_id):
             await update.message.reply_text("Sorry, you're not authorized to use this bot.")
             return
 
         # Process message
         response = await self.handle_message(
-            text=update.message.text,
+            text=text,
             user_id=str(user_id),
         )
+
+        # Warn when no allowlist is configured (bot is open to anyone)
+        if no_allowlist and not is_self_register:
+            response = (
+                response
+                + "\n\n\u26a0\ufe0f *Bot is open to anyone.* "
+                "Send `setup telegram allow me` to restrict access to your ID."
+            )
 
         # Send response
         await update.message.reply_text(response, parse_mode="Markdown")

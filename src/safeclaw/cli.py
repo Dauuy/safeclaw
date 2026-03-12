@@ -227,7 +227,10 @@ async def _llm_setup_action(
     params: dict, user_id: str, channel: str, engine: SafeClaw
 ) -> str:
     """Handle AI/integration setup commands."""
-    from safeclaw.core.llm_installer import auto_setup, setup_wolfram, setup_telegram
+    from safeclaw.core.llm_installer import (
+        auto_setup, setup_wolfram, setup_telegram,
+        setup_telegram_allow, setup_telegram_deny,
+    )
 
     raw = params.get("raw_input", "")
     lower = raw.lower().strip()
@@ -236,6 +239,16 @@ async def _llm_setup_action(
     if lower.startswith("setup wolfram"):
         app_id = raw[len("setup wolfram"):].strip()
         return setup_wolfram(app_id, engine.config_path)
+
+    # ── setup telegram allow <target> ─────────────────────────────────────
+    if lower.startswith("setup telegram allow"):
+        target = raw[len("setup telegram allow"):].strip() or "list"
+        return setup_telegram_allow(target, user_id, engine.config_path)
+
+    # ── setup telegram deny <target> ──────────────────────────────────────
+    if lower.startswith("setup telegram deny"):
+        target = raw[len("setup telegram deny"):].strip()
+        return setup_telegram_deny(target, engine.config_path)
 
     # ── setup telegram <token> ────────────────────────────────────────────
     if lower.startswith("setup telegram"):

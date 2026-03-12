@@ -604,6 +604,136 @@ def setup_wolfram(app_id: str, config_path: Path) -> str:
         return f"Could not save config: {e}"
 
 
+def setup_telegram_allow(
+    target: str,
+    requester_id: str,
+    config_path: Path,
+) -> str:
+    """
+    Add a Telegram user ID to the allowed_users list.
+
+    target       = "me"        → use requester_id (self-register from Telegram)
+    target       = "list"      → show current allowlist
+    target       = "123456789" → add that numeric ID explicitly
+    requester_id               → the Telegram user_id of whoever sent the command
+    """
+    try:
+        if config_path.exists():
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+        else:
+            config = {}
+    except Exception as e:
+        return f"Could not read config: {e}"
+
+    channels = config.get("channels") or {}
+    telegram_cfg = channels.get("telegram") or {}
+
+    # ── list ──────────────────────────────────────────────────────────────
+    if target.lower() == "list":
+        allowed = telegram_cfg.get("allowed_users") or []
+        if not allowed:
+            return (
+                "No user ID restrictions set — the bot is open to anyone who finds it.\n\n"
+                "Send `setup telegram allow me` from Telegram to lock it to just you."
+            )
+        return "**Allowed Telegram user IDs:**\n" + "\n".join(f"  {uid}" for uid in allowed)
+
+    # ── resolve ID ────────────────────────────────────────────────────────
+    if target.lower() == "me":
+        if not requester_id or not requester_id.isdigit():
+            return (
+                "Can't detect your ID from here.\n\n"
+                "Send this command from your Telegram chat with the bot, or:\n"
+                "  setup telegram allow <your-numeric-id>"
+            )
+        new_id = int(requester_id)
+    elif target.isdigit():
+        new_id = int(target)
+    else:
+        return (
+            f"'{target}' is not a valid Telegram user ID.\n\n"
+            "Usage:\n"
+            "  setup telegram allow me          — self-register (send from Telegram)\n"
+            "  setup telegram allow 123456789   — add by numeric ID\n"
+            "  setup telegram allow list        — show current allowlist"
+        )
+
+    # ── add to list ───────────────────────────────────────────────────────
+    allowed = list(telegram_cfg.get("allowed_users") or [])
+    if new_id in allowed:
+        return f"User ID {new_id} is already in the allowlist."
+
+    allowed.append(new_id)
+    telegram_cfg["allowed_users"] = allowed
+    channels["telegram"] = telegram_cfg
+    config["channels"] = channels
+
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(config_path, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    except Exception as e:
+        return f"Could not save config: {e}"
+
+    is_self = target.lower() == "me"
+    extra = " (that's you!)" if is_self else ""
+    return (
+        f"**Done.** User ID {new_id}{extra} added to the allowlist.\n\n"
+        f"Bot now restricted to: {', '.join(str(u) for u in allowed)}\n\n"
+        "Remove with: `setup telegram deny <id>`\n"
+        "Show list:   `setup telegram allow list`"
+    )
+
+
+def setup_telegram_deny(target: str, config_path: Path) -> str:
+    """Remove a Telegram user ID from the allowed_users list."""
+    if not target.isdigit():
+        return (
+            f"'{target}' is not a valid Telegram user ID.\n"
+            "Usage: setup telegram deny 123456789"
+        )
+
+    remove_id = int(target)
+
+    try:
+        if config_path.exists():
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+        else:
+            return "No config file found."
+    except Exception as e:
+        return f"Could not read config: {e}"
+
+    channels = config.get("channels") or {}
+    telegram_cfg = channels.get("telegram") or {}
+    allowed = list(telegram_cfg.get("allowed_users") or [])
+
+    if remove_id not in allowed:
+        return f"User ID {remove_id} is not in the allowlist."
+
+    allowed.remove(remove_id)
+    telegram_cfg["allowed_users"] = allowed if allowed else None
+    channels["telegram"] = telegram_cfg
+    config["channels"] = channels
+
+    try:
+        with open(config_path, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    except Exception as e:
+        return f"Could not save config: {e}"
+
+    if not allowed:
+        return (
+            f"Removed {remove_id}. Allowlist is now empty — "
+            "bot will respond to anyone."
+        )
+    return (
+        f"Removed {remove_id}.\n"
+        f"Remaining allowed IDs: {', '.join(str(u) for u in allowed)}"
+    )
+
+
 def setup_telegram(token: str, config_path: Path) -> str:
     """
     Save a Telegram bot token to config.
@@ -658,9 +788,13 @@ def setup_telegram(token: str, config_path: Path) -> str:
             "Install the Telegram library if you haven't:\n"
             "  pip install safeclaw[telegram]\n\n"
             "Then restart SafeClaw — your bot will start polling.\n\n"
-            "Optional: restrict to specific Telegram user IDs by adding\n"
-            "  allowed_users: [123456789]\n"
-            "under channels.telegram in config.yaml."
+            "**Restrict access to your user ID** (recommended):\n"
+            "  Send this from your Telegram chat with the bot:\n"
+            "    `setup telegram allow me`\n\n"
+            "Other access commands:\n"
+            "  `setup telegram allow list`        — view allowlist\n"
+            "  `setup telegram allow 123456789`   — add a numeric ID\n"
+            "  `setup telegram deny 123456789`    — remove an ID"
         )
     except Exception as e:
         return f"Could not save config: {e}"
