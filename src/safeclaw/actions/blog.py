@@ -209,6 +209,10 @@ class BlogAction(BaseAction):
         if self._is_ai_switch(lower):
             return self._ai_switch_provider(raw_input)
 
+        # Publishing how-to questions
+        if self._is_publish_question(lower):
+            return self._publish_how_to(lower)
+
         # Publishing commands
         if self._is_setup_publish(lower):
             return await self._setup_publish(raw_input, user_id, engine)
@@ -983,6 +987,42 @@ class BlogAction(BaseAction):
                 f"  Location: {location}\n\n"
                 f"To save permanently add to config/config.yaml under publish_targets."
             )
+
+    def _is_publish_question(self, text: str) -> bool:
+        return bool(re.search(
+            r'how\s+(do\s+i|can\s+i|to)\s+(publish|upload|deploy|post|send)|'
+            r'(publish|upload|deploy)\s+(to\s+)?(sftp|ftp|wordpress|wp|joomla|server|remote|site|my\s+site)|'
+            r'(sftp|ftp)\s+(publish|upload|how|setup|configure)',
+            text,
+        ))
+
+    def _publish_how_to(self, text: str) -> str:
+        if re.search(r'\b(sftp|ftp)\b', text):
+            return (
+                "**Publish to SFTP**\n\n"
+                "1. Register your server once:\n"
+                "   `setup blog publish sftp://your-host.com user password /remote/path`\n\n"
+                "   With a custom port:\n"
+                "   `setup blog publish sftp://your-host.com:2222 user password /remote/path`\n\n"
+                "2. Then publish any time:\n"
+                "   `publish blog to your-host.com`\n\n"
+                "The bot previews the title first and asks for confirmation before uploading.\n\n"
+                "**Other targets:** WordPress, Joomla, custom API\n"
+                "  `setup blog publish` — see all options"
+            )
+        if re.search(r'\b(wordpress|wp)\b', text):
+            return (
+                "**Publish to WordPress**\n\n"
+                "1. Generate an application password in WordPress:\n"
+                "   WordPress Admin → Users → Profile → Application Passwords\n\n"
+                "2. Register it once:\n"
+                "   `setup blog publish wp://yoursite.com username app-password`\n\n"
+                "3. Then publish any time:\n"
+                "   `publish blog to yoursite.com`\n\n"
+                "**Other targets:** SFTP, Joomla, custom API\n"
+                "  `setup blog publish` — see all options"
+            )
+        return self._setup_publish_help()
 
     def _setup_publish_help(self) -> str:
         return (
