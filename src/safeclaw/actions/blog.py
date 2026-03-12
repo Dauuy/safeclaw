@@ -237,7 +237,14 @@ class BlogAction(BaseAction):
         if self._is_publish(lower):
             return self._publish_blog(raw_input, user_id)
 
-        # Default: treat as writing blog news
+        # Default: treat as writing blog news — but not if it looks like a question
+        if self._is_question(lower):
+            if engine.nlu:
+                answer = await engine.nlu.answer_question(raw_input, engine.get_help())
+                if answer:
+                    return answer
+            return self._help_text()
+
         content = self._extract_blog_content(raw_input)
         if content:
             return await self._write_blog_news(raw_input, user_id, engine)
@@ -1890,6 +1897,18 @@ class BlogAction(BaseAction):
             if line.strip():
                 lines.append(line.strip())
         return "\n".join(lines)
+
+    def _is_question(self, text: str) -> bool:
+        """Return True if input looks like a question rather than blog content."""
+        return bool(re.search(
+            r'\?$|'
+            r'\b(how\s+(do|can|to|does|did|would|should)|'
+            r'what\s+(is|are|does|can|should)|'
+            r'why\s+(is|are|does|do)|'
+            r'where\s+(do|can|is)|'
+            r'can\s+i|should\s+i)\b',
+            text,
+        ))
 
     def _extract_blog_content(self, raw_input: str) -> str:
         """Extract blog content from natural language input."""
