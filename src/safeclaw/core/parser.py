@@ -1339,6 +1339,13 @@ class CommandParser:
         """
         text = normalize_text(text.strip())
 
+        # Text-consuming commands must never be split — any chain operators
+        # in their content belong to the argument, not the command chain.
+        lowered = text.lower()
+        if any(lowered.startswith(p) for p in self._TEXT_CONSUMING_PREFIXES):
+            cmd = self.parse(text, user_id)
+            return CommandChain(commands=[cmd], chain_type="none")
+
         # Split into segments
         segments, chain_type = self._split_chain(text)
 
