@@ -28,7 +28,7 @@ from urllib.parse import urlparse
 
 from safeclaw.actions.base import BaseAction
 from safeclaw.core.ai_writer import AIWriter, load_ai_writer_from_yaml
-from safeclaw.core.blog_publisher import BlogPublisher
+from safeclaw.core.blog_publisher import BlogPublisher, PublishTarget, PublishTargetType
 from safeclaw.core.crawler import Crawler
 from safeclaw.core.frontpage import FrontPageManager
 from safeclaw.core.summarizer import Summarizer
@@ -906,18 +906,25 @@ class BlogAction(BaseAction):
 
     async def _publish_remote(self, raw_input: str, user_id: str) -> str:
         """Publish blog to a remote target (WordPress, Joomla, SFTP, API)."""
+        # Try to parse an inline target (sftp://... wp://... etc.) before
+        # checking configured targets, so setup-free publishing always works.
+        inline_target = self._parse_inline_target(raw_input)
+        if inline_target:
+            if not self.publisher:
+                self.publisher = BlogPublisher()
+            self.publisher.add_target(inline_target)
+
         if not self.publisher or not self.publisher.targets:
             return (
                 "No publishing targets configured.\n\n"
-                "Add targets in config/config.yaml under publish_targets.\n"
-                "Supported: wordpress, joomla, sftp, api\n\n"
-                "Example:\n"
-                "  publish_targets:\n"
-                "    - label: my-wordpress\n"
-                "      type: wordpress\n"
-                "      url: https://mysite.com\n"
-                "      username: admin\n"
-                "      password: xxxx xxxx xxxx xxxx"
+                "You can publish inline without any config:\n"
+                "  publish blog to sftp://host username password\n"
+                "  publish blog to sftp://host:port username password /remote/path\n"
+                "  publish blog to wp://mysite.com username password\n"
+                "  publish blog to wordpress://mysite.com username password\n"
+                "  publish blog to joomla://mysite.com username password\n"
+                "  publish blog to api://mysite.com/endpoint api_key\n\n"
+                "Or add permanent targets in config/config.yaml under publish_targets."
             )
 
         draft_path = self._get_draft_path(user_id)
@@ -935,7 +942,10 @@ class BlogAction(BaseAction):
         )
 
         target_label = None
-        if target_match:
+        if inline_target:
+            # Use the inline target directly
+            target_label = inline_target.label
+        elif target_match:
             label = target_match.group(1).lower()
             # Check if it matches a target label
             if label in self.publisher.targets:
@@ -998,6 +1008,79 @@ class BlogAction(BaseAction):
             lines.extend(["", "Use 'set front page <post_id> on <target>' to feature this post."])
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _parse_inline_target(raw_input: str) -> PublishTarget | None:
+        """
+        Parse an inline publish target from the command string.
+
+        Supported syntax:
+          publish blog to sftp://host username password
+          publish blog to sftp://host:port username password
+          publish blog to sftp://host:port username password /remote/path
+          publish blog to wp://https://mysite.com username password
+          publish blog to wordpress://mysite.com username password
+          publish blog to joomla://mysite.com username password
+          publish blog to api://mysite.com/endpoint api_key
+        """
+        # Match scheme://... followed by optional tokens
+        m = re.search(
+            r'(?:publish|upload|deploy|push)\s+(?:blog\s+)?to\s+'
+            r'(sftp|wp|wordpress|joomla|api)://([\S]+?)(?:\s+(\S+)(?:\s+(\S+)(?:\s+(\S+))?)?)?$',
+            raw_input.strip(), re.IGNORECASE,
+        )
+        if not m:
+            return None
+
+        scheme = m.group(1).lower()
+        host_part = m.group(2).rstrip('/')
+        token1 = m.group(3) or ""   # username / api_key
+        token2 = m.group(4) or ""   # password
+        token3 = m.group(5) or ""   # remote path (sftp only)
+
+        if scheme == "sftp":
+            host, _, port_str = host_part.partition(":")
+            port = int(port_str) if port_str.isdigit() else 22
+            return PublishTarget(
+                label=f"sftp-{host}",
+                target_type=PublishTargetType.SFTP,
+                sftp_host=host,
+                sftp_port=port,
+                sftp_user=token1,
+                sftp_password=token2,
+                sftp_remote_path=token3 or "/var/www/html/blog",
+            )
+
+        if scheme in ("wp", "wordpress"):
+            url = host_part if host_part.startswith("http") else f"https://{host_part}"
+            return PublishTarget(
+                label=f"wp-{host_part.split('/')[0]}",
+                target_type=PublishTargetType.WORDPRESS,
+                url=url,
+                username=token1,
+                password=token2,
+            )
+
+        if scheme == "joomla":
+            url = host_part if host_part.startswith("http") else f"https://{host_part}"
+            return PublishTarget(
+                label=f"joomla-{host_part.split('/')[0]}",
+                target_type=PublishTargetType.JOOMLA,
+                url=url,
+                username=token1,
+                password=token2,
+            )
+
+        if scheme == "api":
+            url = host_part if host_part.startswith("http") else f"https://{host_part}"
+            return PublishTarget(
+                label=f"api-{host_part.split('/')[0]}",
+                target_type=PublishTargetType.API,
+                url=url,
+                api_key=token1,
+            )
+
+        return None
 
     def _extract_publish_title(self, raw_input: str) -> str:
         """Extract a custom title from the publish command."""
