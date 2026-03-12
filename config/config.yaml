@@ -10,6 +10,20 @@ safeclaw:
   # languages: ["en", "es", "fr"]
   timezone: "UTC"
 
+  # Optional: LLM-assisted Natural Language Understanding (NLU)
+  # When enabled, commands that can't be matched by the rule-based parser
+  # are sent to an LLM which translates them into the closest SafeClaw
+  # command. The translated string still goes through the same parser —
+  # the LLM never executes anything directly.
+  # Requires at least one entry under ai_providers below.
+  #
+  # nlu:
+  #   enabled: true
+  #   provider: my-claude       # optional — uses active provider if omitted
+  #   max_tokens: 64
+  #   temperature: 0.0
+  #   show_translation: true    # prefix reply with "_(understood as: ...)_"
+
 # Channels
 channels:
   cli:

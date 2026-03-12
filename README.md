@@ -15,8 +15,8 @@ SafeClaw uses VADER, spaCy, sumy, YOLO, Whisper, Piper, and other battle-tested 
 | | SafeClaw | OpenClaw |
 |---|---|---|
 | **Monthly cost** | **$0** | $100–$3,600+ |
-| **Requires LLM** | No (optional for AI blog) | Yes |
-| **Prompt injection risk** | **Minimal** (only if LLM research enabled) | Yes (everywhere) |
+| **Requires LLM** | No (optional for AI blog/NLU) | Yes |
+| **Prompt injection risk** | **Minimal** (only if LLM NLU/research enabled) | Yes (everywhere) |
 | **Works offline** | **Yes** (core features) | No |
 | **Runs on any machine** | **Yes** (Linux, macOS, Windows) | Needs powerful hardware or cloud APIs |
 | **Deterministic output** | **Yes** | No (LLM responses vary) |
@@ -122,6 +122,39 @@ SafeClaw uses VADER, spaCy, sumy, YOLO, Whisper, Piper, and other battle-tested 
 * **Shorthand** — "tmrw" → "tomorrow", "hrs" → "hours", "mins" → "minutes"
 * **Auto-learns from mistakes** — If a command fails and you retype it correctly, SafeClaw remembers the mapping for next time
 * **No AI needed** — All corrections are rule-based and deterministic
+
+### 💬 Optional LLM Command Understanding (NLU)
+Don't want to memorise command syntax? Enable the NLU bridge and just talk naturally:
+
+```
+# Without NLU — you have to know the exact phrase:
+remind me tomorrow at 9am to call the dentist
+
+# With NLU enabled — any phrasing works:
+hey, can you remind me to call the dentist tomorrow morning at 9?
+I need a reminder for tomorrow at 9 to call the dentist
+put a 9am reminder tomorrow: dentist call
+```
+
+The NLU bridge uses your configured LLM (any provider) as a **pure translator**:
+it converts what you typed into the closest matching SafeClaw command string,
+which then goes through the same rule-based parser as always. The LLM never
+executes anything directly — it only re-words your input.
+
+Enable in `config/config.yaml`:
+
+```yaml
+safeclaw:
+  nlu:
+    enabled: true
+    provider: my-claude        # optional — uses active provider if omitted
+    temperature: 0.0           # deterministic output
+    show_translation: true     # shows "_(understood as: remind me ...)_" prefix
+```
+
+**Privacy note:** When NLU is enabled, unrecognised commands are sent to your
+configured LLM provider. Recognised commands (the vast majority) are still
+handled entirely locally with zero tokens consumed.
 
 ### ✍️ Writing Style Profiler
 * **Learn your voice** — Feed SafeClaw your writing and it builds a 35-metric profile (sentence length, vocabulary, formality, contractions, structure, favorite words, etc.)

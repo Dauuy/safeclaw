@@ -29,6 +29,7 @@ class SafeClaw:
     - Scheduled triggers (cron, webhooks, file watchers)
     - Persistent memory (SQLite-based)
     - No GenAI required - uses rule-based parsing
+    - Optional LLM-based NLU fallback (opt-in via config)
     - Fuzzy learning: deterministic writing style profiling
     - Per-task LLM routing (blog, research, coding each get their own provider)
     - Cron-based auto-blogging (no LLM)
@@ -54,6 +55,9 @@ class SafeClaw:
         self.memory = Memory(self.data_dir / "memory.db")
         self.scheduler = Scheduler()
 
+        # Optional NLU bridge (loaded after config)
+        self.nlu: Any = None
+
         # Blog scheduler (initialized after config load)
         self.blog_scheduler: Any = None
 
@@ -72,6 +76,30 @@ class SafeClaw:
 
         # Load multilingual command support
         self._load_languages()
+
+        # Optionally initialize LLM-based NLU fallback
+        self._load_nlu()
+
+    def _load_nlu(self) -> None:
+        """Initialise the optional LLM NLU bridge if enabled in config."""
+        sc = self.config.get("safeclaw", {})
+        nlu_cfg = sc.get("nlu", {})
+        if not nlu_cfg.get("enabled", False):
+            return
+
+        ai_cfg = self.config.get("ai_providers")
+        if not ai_cfg:
+            logger.warning("NLU enabled but no ai_providers configured — NLU disabled.")
+            return
+
+        try:
+            from safeclaw.core.ai_writer import load_ai_writer_from_yaml
+            from safeclaw.core.nlu import NLUInterpreter
+            ai_writer = load_ai_writer_from_yaml(self.config)
+            self.nlu = NLUInterpreter(ai_writer, self.parser, nlu_cfg)
+            logger.info("NLU bridge enabled (LLM-assisted command understanding).")
+        except Exception as e:
+            logger.warning(f"NLU initialisation failed: {e}")
 
     def _load_languages(self) -> None:
         """Load multilingual command support from config.
@@ -199,6 +227,27 @@ class SafeClaw:
         # No matching intent — auto-learn opportunity
         if parsed.intent:
             return f"I understand you want to '{parsed.intent}', but I don't have that action configured."
+
+        # ── Optional NLU fallback: ask LLM to translate and retry ────────────
+        if self.nlu:
+            translated = await self.nlu.translate(text)
+            if translated:
+                parsed2 = self.parser.parse(translated, user_id)
+                if parsed2.intent and parsed2.intent in self.actions:
+                    try:
+                        params2 = dict(parsed2.params)
+                        params2["raw_input"] = text  # keep original for actions
+                        result = await self._execute_action(
+                            action=parsed2.intent,
+                            params=params2,
+                            user_id=user_id,
+                            channel=channel,
+                        )
+                        if self.nlu.show_translation:
+                            return f"_(understood as: {translated})_\n\n{result}"
+                        return result
+                    except Exception as e:
+                        logger.error(f"NLU-translated action failed: {e}")
 
         # Track failed command for potential auto-learning
         # If the user immediately follows up with a successful command,
