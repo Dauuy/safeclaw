@@ -246,10 +246,22 @@ async def _llm_setup_action(
     if "status" in raw.lower() and not arg:
         arg = "status"
 
-    return await auto_setup(
+    result = await auto_setup(
         arg=arg,
         config_path=engine.config_path,
     )
+
+    # Reload in-memory config so blog/research/code actions pick up the new provider
+    engine.load_config()
+
+    # Reset lazy-initialized actions so they re-read the updated config
+    for action_handler in engine.actions.values():
+        # Action handlers are bound methods — get the underlying object
+        obj = getattr(action_handler, "__self__", None)
+        if obj and hasattr(obj, "_initialized"):
+            obj._initialized = False
+
+    return result
 
 
 @app.callback(invoke_without_command=True)
