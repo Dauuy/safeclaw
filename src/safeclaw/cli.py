@@ -226,24 +226,37 @@ async def _flow_action(
 async def _llm_setup_action(
     params: dict, user_id: str, channel: str, engine: SafeClaw
 ) -> str:
-    """Handle AI setup — enter your key or install local AI."""
-    from safeclaw.core.llm_installer import auto_setup
+    """Handle AI/integration setup commands."""
+    from safeclaw.core.llm_installer import auto_setup, setup_wolfram, setup_telegram
 
     raw = params.get("raw_input", "")
+    lower = raw.lower().strip()
 
-    # Extract everything after the trigger keyword
+    # ── setup wolfram <app-id> ────────────────────────────────────────────
+    if lower.startswith("setup wolfram"):
+        app_id = raw[len("setup wolfram"):].strip()
+        return setup_wolfram(app_id, engine.config_path)
+
+    # ── setup telegram <token> ────────────────────────────────────────────
+    if lower.startswith("setup telegram"):
+        token = raw[len("setup telegram"):].strip()
+        result = setup_telegram(token, engine.config_path)
+        if token:
+            engine.load_config()  # pick up new channel config immediately
+        return result
+
+    # ── setup ai … ────────────────────────────────────────────────────────
     arg = ""
     for keyword in ["setup ai", "install llm", "install ai", "install ollama",
                      "setup llm", "setup ollama", "llm status", "ai status",
                      "llm setup", "ai setup", "local ai", "get ollama"]:
-        lower = raw.lower()
         if keyword in lower:
             idx = lower.index(keyword) + len(keyword)
             arg = raw[idx:].strip()
             break
 
     # "llm status" / "ai status" → pass "status"
-    if "status" in raw.lower() and not arg:
+    if "status" in lower and not arg:
         arg = "status"
 
     result = await auto_setup(
