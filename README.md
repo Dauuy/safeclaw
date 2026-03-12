@@ -1,6 +1,6 @@
 # SafeClaw 🐾
 
-**The zero-cost alternative to OpenClaw. No LLM required. No API bills. Minimal attack surface. Runs on any machine.**
+**The zero-cost alternative to OpenClaw. No LLM required, though it is optional. No required API bills. Minimal attack surface. Runs on any machine.**
 
 > **ONE HUNDRED STARS** — We hit ONE HUNDRED stars on GitHub! This milestone is our biggest update since our original release. It brings: **Real Research, Simple AI Setup, and Smart Learning.** Research now searches arXiv and Semantic Scholar for real academic papers, asks Wolfram Alpha for computational answers. `setup ai sk-ant-your-key` instantly configures Anthropic (or any provider) — or `setup ai local` for free Ollama. The parser auto-corrects typos, converts word-numbers ("one" → 1), and learns from your mistakes automatically. [See the new features below.](#-real-research-sources) Previous milestone: [Fuzzy Learning & Personalization.](#-writing-style-profiler) Next milestone: **TWO HUNDRED AND FIFTY  stars** that release will 🤯 
 
@@ -1078,6 +1078,7 @@ Contributions welcome! Areas we'd love help with:
 ---
 
 **SafeClaw** — Because your assistant shouldn't cost more than your rent. 🐾
+
 
 
 
