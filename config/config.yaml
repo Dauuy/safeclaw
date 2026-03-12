@@ -48,13 +48,39 @@ apis:
   newsapi: ""  # For news in briefings
 
 # ─────────────────────────────────────────────────────────────────────────────
-# AI Providers - Optional. Only needed for AI-powered blogging.
-# Deterministic blogging (no AI) works without any provider configured.
-# See the Blogging Guide in README.md for full setup instructions.
+# Per-Task LLM Routing (100-Star Feature)
+# Assign different AI providers to different tasks.
+# Each value is a provider label from ai_providers below.
+# If not set, the default/active provider is used for all tasks.
+# ─────────────────────────────────────────────────────────────────────────────
+# task_providers:
+#   blog: "local-ollama"        # LLM for blog writing
+#   research: "openai"          # LLM for deep research analysis
+#   coding: "anthropic"         # LLM for code generation/review
+#   general: "local-ollama"     # LLM for everything else
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Auto-Blog Scheduler (100-Star Feature) — Cron publishing without LLM
+# Fetches from RSS, summarizes with sumy, formats, publishes. Zero AI cost.
+# ─────────────────────────────────────────────────────────────────────────────
+# auto_blogs:
+#   - name: "weekly-tech"
+#     cron_expr: "0 9 * * 1"          # Every Monday at 9am
+#     enabled: true
+#     source_categories: [tech, programming]
+#     post_template: "digest"         # digest, single, or curated
+#     summary_sentences: 5
+#     max_items: 5
+#     auto_publish: false             # true = publish, false = save draft
+#     publish_target: ""              # target label or empty for local
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AI Providers - Optional. Used for blog writing, research, and coding.
+# Deterministic features (no AI) work without any provider configured.
 #
 # Multiple providers can be configured simultaneously.
 # The first enabled provider becomes the active/default one.
-# Switch at runtime with: switch ai provider <label>
+# Assign providers to specific tasks with task_providers above.
 #
 # Local AI (free, private, no API key needed):
 #   - Ollama:    https://ollama.com/download

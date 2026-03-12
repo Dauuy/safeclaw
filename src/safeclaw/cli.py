@@ -22,11 +22,13 @@ from safeclaw.actions import weather as weather_action
 from safeclaw.actions.blog import BlogAction
 from safeclaw.actions.briefing import BriefingAction
 from safeclaw.actions.calendar import CalendarAction
+from safeclaw.actions.code import CodeAction
 from safeclaw.actions.crawl import CrawlAction
 from safeclaw.actions.email import EmailAction
 from safeclaw.actions.files import FilesAction
 from safeclaw.actions.news import NewsAction
 from safeclaw.actions.reminder import ReminderAction
+from safeclaw.actions.research import ResearchAction
 from safeclaw.actions.shell import ShellAction
 from safeclaw.actions.summarize import SummarizeAction
 from safeclaw.channels.cli import CLIChannel
@@ -35,7 +37,12 @@ from safeclaw.core.crawler import Crawler
 from safeclaw.core.documents import DocumentReader
 from safeclaw.core.engine import SafeClaw
 from safeclaw.core.feeds import PRESET_FEEDS, FeedReader
+from safeclaw.core.prompt_builder import PromptBuilder
 from safeclaw.core.summarizer import Summarizer, SummaryMethod
+from safeclaw.core.writing_style import (
+    load_writing_profile,
+    update_writing_profile,
+)
 from safeclaw.plugins import PluginLoader
 
 app = typer.Typer(
@@ -71,6 +78,8 @@ def create_engine(config_path: Path | None = None) -> SafeClaw:
     email_action = EmailAction()
     calendar_action = CalendarAction()
     blog_action = BlogAction()
+    research_action = ResearchAction()
+    code_action = CodeAction()
 
     engine.register_action("files", files_action.execute)
     engine.register_action("shell", shell_action.execute)
@@ -83,13 +92,132 @@ def create_engine(config_path: Path | None = None) -> SafeClaw:
     engine.register_action("calendar", calendar_action.execute)
     engine.register_action("weather", weather_action.execute)
     engine.register_action("blog", blog_action.execute)
+    engine.register_action("research", research_action.execute)
+    engine.register_action("code", code_action.execute)
     engine.register_action("help", lambda **_: engine.get_help())
+
+    # Register style profile action (fuzzy learning)
+    engine.register_action("style", _style_action)
+
+    # Register auto-blog action
+    engine.register_action("autoblog", _autoblog_action)
+
+    # Register flow diagram action
+    engine.register_action("flow", _flow_action)
 
     # Load plugins from plugins/official/ and plugins/community/
     plugin_loader = PluginLoader()
     plugin_loader.load_all(engine)
 
     return engine
+
+
+async def _style_action(
+    params: dict, user_id: str, channel: str, engine: SafeClaw
+) -> str:
+    """Handle writing style profile commands."""
+    raw = params.get("raw_input", "").lower()
+
+    if "learn" in raw:
+        # Feed text to the profiler
+        text = raw.split("learn", 1)[-1].strip()
+        if not text:
+            return (
+                "Provide text to learn from:\n"
+                "  `style learn <paste your writing here>`\n\n"
+                "Or SafeClaw automatically learns from your blog posts."
+            )
+        profile = await update_writing_profile(engine.memory, user_id, text)
+        return (
+            f"Learned from your writing! ({profile.samples_analyzed} samples total)\n\n"
+            f"{profile.get_summary()}"
+        )
+
+    # Show profile
+    profile = await load_writing_profile(engine.memory, user_id)
+    if not profile or profile.samples_analyzed == 0:
+        return (
+            "No writing profile yet. SafeClaw learns your style from:\n"
+            "  1. Blog posts you write\n"
+            "  2. Text you feed it: `style learn <your text>`\n\n"
+            "The more you write, the better it matches your voice."
+        )
+
+    lines = [
+        f"**Your Writing Profile** ({profile.samples_analyzed} samples)",
+        "",
+        profile.get_summary(),
+        "",
+        "**System Prompt Instructions (sent to LLM):**",
+        profile.to_prompt_instructions(),
+    ]
+    return "\n".join(lines)
+
+
+async def _autoblog_action(
+    params: dict, user_id: str, channel: str, engine: SafeClaw
+) -> str:
+    """Handle auto-blog scheduling commands."""
+    from safeclaw.core.blog_scheduler import AutoBlogConfig, BlogScheduler
+
+    raw = params.get("raw_input", "").lower()
+
+    if not engine.blog_scheduler:
+        engine.blog_scheduler = BlogScheduler(engine)
+
+    if "list" in raw or "show" in raw:
+        schedules = engine.blog_scheduler.list_schedules()
+        if not schedules:
+            return "No auto-blog schedules configured."
+        lines = ["**Auto-Blog Schedules**", ""]
+        for s in schedules:
+            status = "enabled" if s["enabled"] else "disabled"
+            lines.append(
+                f"  {s['name']} ({status}): {s['cron']} | "
+                f"Template: {s['template']} | Next: {s['next_run']}"
+            )
+        return "\n".join(lines)
+
+    if "remove" in raw or "delete" in raw:
+        name = raw.split("remove", 1)[-1].strip() or raw.split("delete", 1)[-1].strip()
+        if engine.blog_scheduler.remove_schedule(name.strip()):
+            return f"Removed auto-blog schedule: {name}"
+        return f"Schedule not found: {name}"
+
+    # Show help / setup instructions
+    return (
+        "**Auto-Blog: Cron-Based Publishing (No LLM)**\n\n"
+        "Auto-blog fetches content from RSS feeds, summarizes with sumy,\n"
+        "formats into posts, and publishes on schedule. Zero AI cost.\n\n"
+        "Configure in config.yaml:\n"
+        "```yaml\n"
+        "auto_blogs:\n"
+        '  - name: "weekly-tech"\n'
+        '    cron_expr: "0 9 * * 1"    # Every Monday at 9am\n'
+        "    source_categories:\n"
+        "      - tech\n"
+        "      - programming\n"
+        '    post_template: "digest"    # digest, single, or curated\n'
+        "    summary_sentences: 5\n"
+        "    max_items: 5\n"
+        "    auto_publish: false        # true = publish, false = save draft\n"
+        '    publish_target: ""         # target label or empty for local\n'
+        "```\n\n"
+        "Templates:\n"
+        "  - **digest**: Multi-item roundup with categories\n"
+        "  - **single**: Feature one story with related items\n"
+        "  - **curated**: Numbered list with editorial excerpts\n\n"
+        "Commands:\n"
+        "  `auto blog list` — Show all schedules\n"
+        "  `auto blog remove <name>` — Remove a schedule"
+    )
+
+
+async def _flow_action(
+    params: dict, user_id: str, channel: str, engine: SafeClaw
+) -> str:
+    """Show system architecture flow diagram."""
+    return PromptBuilder.get_flow_diagram()
 
 
 @app.callback(invoke_without_command=True)
@@ -655,6 +783,19 @@ memory:
 apis:
   openweathermap: ""  # For weather in briefings
   newsapi: ""  # For news in briefings
+
+# Per-task LLM routing (100-star feature)
+# task_providers:
+#   blog: "local-ollama"
+#   research: "openai"
+#   coding: "anthropic"
+
+# Auto-blog scheduler (100-star feature, no LLM)
+# auto_blogs:
+#   - name: "weekly-tech"
+#     cron_expr: "0 9 * * 1"
+#     source_categories: [tech]
+#     post_template: "digest"
 """
 
 DEFAULT_INTENTS = """# Custom intent patterns

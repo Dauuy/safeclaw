@@ -2,7 +2,7 @@
 
 **The zero-cost alternative to OpenClaw. No LLM. No API bills. No prompt injection. Runs on any machine.**
 
-> **50 STARS** — We hit fifty stars on GitHub! Every huge milestone we add something new. This time: **Blogging — two modes.** Deterministic blogging (no AI, just extractive summarization) and optional AI-powered blogging with 11 providers (5 local, 6 cloud). Publish to WordPress, Joomla, SFTP, or any API. [See the Blogging Guide.](#blogging-guide) Next milestone: **100 stars.**
+> **100 STARS** — We hit one hundred stars on GitHub! This milestone brings: **Fuzzy Learning & Personalization.** Writing style profiling that learns how you write, a research pipeline with two-phase gather-then-analyze workflow, a coding toolbox with 7 templates and offline utilities, auto-blog scheduling with cron, and a task-aware prompt builder. All new features work offline with zero LLM cost — AI is optional for deep analysis. [See the new features below.](#-writing-style-profiler) Previous milestone: [Blogging — two modes.](#blogging-guide) Next milestone: **250 stars** 🤯
 
 While OpenClaw users are burning [$200/day](https://www.notebookcheck.net/Free-to-use-AI-tool-can-burn-through-hundreds-of-Dollars-per-day-OpenClaw-has-absurdly-high-token-use.1219925.0.html) and [$3,600/month](https://dev.to/thegdsks/i-tried-the-free-ai-agent-with-124k-github-stars-heres-my-500-reality-check-2885) on API tokens, SafeClaw delivers 90% of the functionality using traditional programming — rule-based parsing, ML pipelines, and local-first tools. **Your API bill: $0. Forever.**
 
@@ -102,6 +102,37 @@ SafeClaw uses VADER, spaCy, sumy, YOLO, Whisper, Piper, and other battle-tested 
 * **Vision** — YOLO object detection + OCR (~2GB)
 * **OCR** — Tesseract text extraction from images (lightweight)
 
+### ✍️ Writing Style Profiler
+* **Learn your voice** — Feed SafeClaw your writing and it builds a 35-metric profile (sentence length, vocabulary, formality, contractions, structure, favorite words, etc.)
+* **Persistent memory** — Your profile is stored in SQLite and improves with every sample
+* **LLM prompt generation** — Profile converts to writing style instructions for any LLM provider
+* **No AI required** — All analysis uses NLTK, VADER, and statistical methods locally
+
+### 🔬 Research Pipeline
+* **Two-phase workflow** — Phase 1 gathers and summarizes sources (no LLM, $0). Phase 2 does optional LLM deep analysis
+* **Source gathering** — Searches RSS feeds and crawls URLs, auto-summarizes with Sumy
+* **Source selection** — You pick which sources matter before spending any tokens
+* **Deep analysis** — Optional LLM analyzes selected sources with structured output
+
+### 💻 Coding Toolbox
+* **7 templates** — python-script, python-class, python-test, fastapi-endpoint, html-page, dockerfile, github-action
+* **Code stats** — Lines of code by language for any directory
+* **Regex tester** — Test and explain regex patterns with match highlighting
+* **Code search** — Regex search across code files
+* **File diff** — Compare two files side by side
+* **LLM-powered (optional)** — Generate, explain, review, refactor, document code
+
+### 📅 Auto Blog Scheduler
+* **Cron scheduling** — Schedule recurring blog generation with cron expressions
+* **Source categories** — Pull from specific RSS categories automatically
+* **Async-safe** — Detects scheduler type mismatches and warns clearly instead of silently failing
+
+### 🧠 Smart Prompt Builder
+* **Task-aware prompts** — Generates optimized prompts for blog, research, and coding tasks
+* **Writing profile integration** — Automatically injects your writing style into blog prompts
+* **Provider routing** — Each task type can use a different LLM provider
+* **Flow diagram** — `show me the flow` displays the full architecture as ASCII art
+
 ### 🥚 Easter Eggs
 * Built-in personality and hidden surprises — because tools should be fun
 
@@ -164,6 +195,11 @@ SafeClaw uses VADER, spaCy, sumy, YOLO, Whisper, Piper, and other battle-tested 
 | Blog (no LLM) | ✅ (extractive titles) | ❌ (requires AI) |
 | Blog (AI-powered) | ✅ (optional, 11 providers) | ✅ |
 | Blog publishing (WordPress, Joomla, SFTP) | ✅ | ❌ (requires plugins) |
+| Writing style learning | ✅ (statistical profiling) | ❌ |
+| Research pipeline | ✅ (two-phase, LLM optional) | ✅ (AI only) |
+| Code templates & tools | ✅ (7 templates, offline utils) | ❌ (requires AI) |
+| Auto-blog scheduling | ✅ (cron-based) | ❌ |
+| Task-aware prompts | ✅ (per-task LLM routing) | ✅ |
 | Command chaining | ✅ ("read email and remind me at 3pm") | ✅ |
 | Autonomous multi-step tasks | ❌ | ✅ |
 | Self-writing skills | ❌ | ✅ |
@@ -262,6 +298,16 @@ safeclaw --verbose
 > ai blog generate about home automation            # AI writes a full post
 > ai rewrite blog                   # AI polishes your draft
 > publish blog to my-wordpress      # Publish to WordPress
+> style learn I write concise, punchy posts.        # Teach SafeClaw your style
+> style profile                     # View your writing profile
+> research WebAssembly performance  # Gather sources (no LLM)
+> research select 1,2,3             # Pick sources to analyze
+> code template python-class UserAuth Auth handler  # Generate boilerplate
+> code templates                    # List all 7 templates
+> code stats src/                   # Lines of code by language
+> code regex \d{3}-\d{4} test 555-1234  # Test regex
+> auto blog list                    # View scheduled auto-blogs
+> show me the flow                  # Architecture diagram
 > help
 ```
 
@@ -317,6 +363,32 @@ safeclaw blog                      # Interactive menu (AI or manual)
 # publish blog to all              # Publish to all targets
 # set front page 123 on my-wp     # Set home page on a target
 
+# Writing Style
+safeclaw style learn "I write short, punchy sentences. No fluff."
+safeclaw style profile             # View your writing profile
+
+# Research
+safeclaw research "WebAssembly performance"  # Gather sources
+safeclaw research sources          # View gathered sources
+safeclaw research select 1,2,3     # Pick sources for deep analysis
+safeclaw research analyze          # LLM deep dive (optional)
+
+# Coding Toolbox
+safeclaw code templates            # List available templates
+safeclaw code template python-class UserAuth "Auth handler"
+safeclaw code stats src/           # Lines of code by language
+safeclaw code search "TODO" src/   # Regex search code files
+safeclaw code regex "\d{3}-\d{4}" test "555-1234"
+safeclaw code diff file1.py file2.py
+
+# Auto Blog
+safeclaw auto blog setup           # Interactive setup wizard
+safeclaw auto blog list            # View scheduled auto-blogs
+safeclaw auto blog remove my-blog  # Remove a schedule
+
+# Flow
+safeclaw flow                      # Architecture diagram
+
 # Webhooks
 safeclaw webhook --port 8765
 
@@ -356,6 +428,144 @@ actions:
     allowed_paths:
       - "~"
 ```
+
+---
+
+## Writing Style & Research Guide
+
+### Writing Style Profiler
+
+SafeClaw learns how you write by analyzing text samples. It builds a statistical profile — no AI needed.
+
+```
+> style learn I've been thinking about this for a while. The tech industry
+  loves to overcomplicate things. Simple solutions work better.
+  Profile updated (1 sample analyzed).
+
+> style learn Here's what I learned from shipping 50 side projects: most
+  of them failed. And that's completely fine!
+  Profile updated (2 samples analyzed).
+
+> style profile
+  Writing Style Profile (2 samples analyzed)
+  Tone: casual, neutral
+  Avg sentence: 7 words
+  Vocabulary: advanced (richness: 72%)
+  Structure: conversational
+  Uses contractions, first person, em-dashes
+  Favorite words: easier, simple, something, learn
+```
+
+Your profile persists across sessions and automatically shapes AI blog prompts so generated posts sound like you.
+
+**Commands:**
+
+| Command | Description |
+|---|---|
+| `style learn <text>` | Feed SafeClaw a writing sample |
+| `style profile` | View your current writing profile |
+
+### Research Pipeline
+
+Two-phase research: gather first (free), then optionally analyze with AI.
+
+```
+> research WebAssembly performance
+  Found 8 sources. Use 'research sources' to view.
+
+> research sources
+  1. [HN] WebAssembly 2.0 Performance Benchmarks (4 sentences)
+  2. [RSS] Wasm vs Native: A Deep Dive (3 sentences)
+  ...
+
+> research select 1,2,5
+  Selected 3 sources for deep analysis.
+
+> research analyze
+  [LLM analyzes your selected sources with structured output]
+```
+
+**Commands:**
+
+| Command | Description |
+|---|---|
+| `research <topic>` | Search feeds & crawl for sources (no LLM) |
+| `research url <url>` | Add a specific URL as a source |
+| `research sources` | View gathered sources with summaries |
+| `research select 1,2,3` | Pick sources for deep analysis |
+| `research analyze` | LLM deep dive on selected sources |
+| `research results` | View analysis results |
+| `research help` | Show all research commands |
+
+### Coding Toolbox
+
+Offline coding utilities plus optional LLM-powered features.
+
+```
+> code templates
+  python-script, python-class, python-test, fastapi-endpoint,
+  html-page, dockerfile, github-action
+
+> code template python-class UserAuth Authentication handler
+  @dataclass
+  class UserAuth:
+      """Authentication handler"""
+      ...
+
+> code stats src/
+  python  ████████████████████ 19,348 lines (55 files) 100%
+
+> code regex \d{3}-\d{4} test 555-1234
+  \d — digit (0-9)
+  Match: 555-1234
+```
+
+**Commands:**
+
+| Command | Description |
+|---|---|
+| `code templates` | List all 7 available templates |
+| `code template <type> [Name] [desc]` | Generate boilerplate code |
+| `code stats <path>` | Lines of code by language |
+| `code search <pattern>` | Regex search across code files |
+| `code read <file>` | Display file with syntax info |
+| `code diff <f1> <f2>` | Compare two files |
+| `code regex <pattern> [test]` | Test and explain regex patterns |
+| `code generate <desc>` | LLM generates code (optional) |
+| `code explain <file>` | LLM explains code (optional) |
+| `code review <file>` | LLM finds bugs (optional) |
+| `code help` | Show all coding commands |
+
+### Auto Blog Scheduler
+
+Schedule recurring blog generation with cron expressions.
+
+```
+> auto blog setup
+  [Interactive wizard]
+
+> auto blog add weekly-tech "0 9 * * 1" tech,ai
+  Auto-blog 'weekly-tech' scheduled: 0 9 * * 1
+
+> auto blog list
+  weekly-tech: 0 9 * * 1 (tech, ai)
+
+> auto blog remove weekly-tech
+  Removed.
+```
+
+### Task-Aware Prompt Builder
+
+Each task type (blog, research, coding) gets optimized prompts. Configure per-task LLM providers:
+
+```yaml
+task_providers:
+  blog: "local-ollama"       # Blog posts use local Ollama
+  research: "openai"         # Research uses OpenAI for quality
+  coding: "local-lmstudio"   # Code tasks use LM Studio
+```
+
+Run `show me the flow` to see the full architecture diagram.
 
 ---
 
@@ -588,6 +798,8 @@ publish_targets:
 
 ## Architecture
 
+> Tip: Run `show me the flow` or `flow` inside SafeClaw to see the full interactive architecture diagram.
+
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                               SAFECLAW                                     │
@@ -597,36 +809,41 @@ publish_targets:
 │  │  CHANNELS   │  │   ACTIONS   │  │  TRIGGERS    │  │    CORE    │      │
 │  ├─────────────┤  ├─────────────┤  ├──────────────┤  ├────────────┤      │
 │  │ • CLI       │  │ • Blog ──────────────────────────▸ AI Writer  │      │
-│  │ • Telegram  │  │ • Files     │  │ • Cron       │  │ • Analyzer │      │
-│  │ • Webhooks  │  │ • Shell     │  │ • Webhooks   │  │ • Documents│      │
-│  │ • Discord   │  │ • Crawl     │  │ • Watchers   │  │ • Notify   │      │
-│  └─────────────┘  │ • Summarize │  │ • Events     │  │ • Feeds    │      │
-│                   │ • Reminder  │  └──────────────┘  │ • Crawler  │      │
-│  ┌─────────────┐  │ • Briefing  │                    │ • Summary  │      │
-│  │   VOICE     │  │ • News/RSS  │  ┌──────────────┐  │ • Voice    │      │
-│  ├─────────────┤  │ • Email     │  │  DEVICES     │  │ • Social   │      │
-│  │ • Whisper   │  │ • Calendar  │  ├──────────────┤  └────────────┘      │
-│  │ • Piper TTS │  │ • Social    │  │ • Bluetooth  │                      │
-│  └─────────────┘  └──────┬──────┘  │ • Network    │  ┌────────────┐      │
-│                          │         │ • Smart Home │  │ AI WRITER  │      │
-│                          │         └──────────────┘  ├────────────┤      │
-│                          │                           │ Local:     │      │
-│                          ▼                           │ • Ollama   │      │
-│  ┌─────────────────────────────────────────────┐     │ • LM Studio│      │
-│  │              BLOG PUBLISHER                  │     │ • llama.cpp│      │
-│  │  WordPress • Joomla • SFTP • Generic API     │     │ Cloud:     │      │
-│  │  Front page management across all targets    │     │ • OpenAI   │      │
-│  └─────────────────────────────────────────────┘     │ • Anthropic│      │
-│                                                       │ • Google   │      │
-│  ┌─────────────────────────────────────────────────┐  │ • Mistral  │      │
-│  │                  COMMAND PARSER                   │  │ • Groq     │      │
-│  │   Keyword + Regex + Fuzzy Match + Date Parser    │  └────────────┘      │
-│  └─────────────────────────────────────────────────┘                       │
-│                                                                            │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                  MEMORY (SQLite)                                     │   │
-│  │   History • Preferences • Reminders • Cache • Events • Blog Drafts  │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
+│  │ • Telegram  │  │ • Research  │  │ • Cron       │  │ • Analyzer │      │
+│  │ • Webhooks  │  │ • Code      │  │ • Webhooks   │  │ • Documents│      │
+│  │ • Discord   │  │ • Style     │  │ • Auto Blog  │  │ • Notify   │      │
+│  └─────────────┘  │ • Files     │  │ • Watchers   │  │ • Feeds    │      │
+│                   │ • Shell     │  │ • Events     │  │ • Crawler  │      │
+│  ┌─────────────┐  │ • Crawl     │  └──────────────┘  │ • Summary  │      │
+│  │   VOICE     │  │ • Summarize │                    │ • Voice    │      │
+│  ├─────────────┤  │ • Reminder  │  ┌──────────────┐  │ • Social   │      │
+│  │ • Whisper   │  │ • Briefing  │  │  DEVICES     │  └────────────┘      │
+│  │ • Piper TTS │  │ • News/RSS  │  ├──────────────┤                      │
+│  └─────────────┘  │ • Email     │  │ • Bluetooth  │  ┌────────────┐      │
+│                   │ • Calendar  │  │ • Network    │  │PERSONALIZE │      │
+│  ┌─────────────┐  │ • Social    │  │ • Smart Home │  ├────────────┤      │
+│  │ PROMPT      │  └──────┬──────┘  └──────────────┘  │ • Style    │      │
+│  │ BUILDER     │         │                           │   Profiler │      │
+│  ├─────────────┤         ▼                           │ • Writing  │      │
+│  │ • Task-     │  ┌──────────────────────────────┐   │   Profile  │      │
+│  │   aware     │  │       BLOG PUBLISHER          │   │ • 35+     │      │
+│  │ • Style     │  │  WordPress • Joomla • SFTP    │   │   metrics │      │
+│  │   inject    │  │  Generic API • Auto Schedule  │   └────────────┘      │
+│  │ • Provider  │  └──────────────────────────────┘                       │
+│  │   routing   │                                      ┌────────────┐      │
+│  └─────────────┘  ┌──────────────────────────────┐    │ AI WRITER  │      │
+│                   │        COMMAND PARSER          │    ├────────────┤      │
+│                   │  Keyword + Regex + Fuzzy       │    │ Local:     │      │
+│                   │  + Date Parser + Specificity   │    │ • Ollama   │      │
+│                   │  Weighted Phrase Matching       │    │ • LM Studio│      │
+│                   └──────────────────────────────┘    │ • llama.cpp│      │
+│                                                       │ Cloud:     │      │
+│  ┌─────────────────────────────────────────────────┐  │ • OpenAI   │      │
+│  │                MEMORY (SQLite)                    │  │ • Anthropic│      │
+│  │  History • Preferences • Reminders • Cache       │  │ • Google   │      │
+│  │  Events • Blog Drafts • Writing Profiles         │  │ • Mistral  │      │
+│  │  Research Sessions                               │  │ • Groq     │      │
+│  └─────────────────────────────────────────────────┘  └────────────┘      │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -641,7 +858,8 @@ Instead of burning tokens on LLMs, SafeClaw uses:
 1. **Keyword matching** — Fast lookup of command keywords
 2. **Regex patterns** — Structured extraction of parameters
 3. **Fuzzy matching** — Typo tolerance with rapidfuzz
-4. **Date parsing** — Natural language dates with dateparser
+4. **Specificity-weighted phrase matching** — Longer, more specific phrases win over short keyword collisions
+5. **Date parsing** — Natural language dates with dateparser
 
 ```
 # Example: "remind me to call mom tomorrow at 3pm"
@@ -744,6 +962,9 @@ src/safeclaw/plugins/
 * You want smart home and Bluetooth control in one tool
 * You want AI blogging with your choice of provider (or no AI at all)
 * You want to publish to WordPress, Joomla, or any server from the CLI
+* You want an assistant that learns how you write and adapts to your style
+* You want a research pipeline that gathers before it spends tokens
+* You need code templates and utilities without spinning up an LLM
 * You don't need free-form AI conversation
 
 **Stick with OpenClaw if:**
@@ -809,6 +1030,7 @@ Contributions welcome! Areas we'd love help with:
 * [desktop-notifier](https://github.com/samschott/desktop-notifier) — Cross-platform notifications
 * [spaCy](https://spacy.io/) — Named entity recognition
 * [YOLO](https://github.com/ultralytics/ultralytics) — Object detection
+* [NLTK](https://www.nltk.org/) — Natural language toolkit (writing style analysis)
 * [Ollama](https://ollama.com/) — Local AI inference (optional, for AI blogging)
 * [LM Studio](https://lmstudio.ai/) — Desktop AI model runner (optional)
 

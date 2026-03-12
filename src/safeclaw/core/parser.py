@@ -169,6 +169,63 @@ PHRASE_VARIATIONS = {
         "ai expand",
         "ai blog seo",
     ],
+    "research": [
+        "research",
+        "look up",
+        "find out about",
+        "search for",
+        "investigate",
+        "research url",
+        "research select",
+        "research analyze",
+        "research sources",
+        "research results",
+        "deep dive",
+        "research help",
+    ],
+    "code": [
+        "code",
+        "coding",
+        "code template",
+        "code templates",
+        "code stats",
+        "code search",
+        "code read",
+        "code diff",
+        "code regex",
+        "code generate",
+        "code explain",
+        "code review",
+        "code refactor",
+        "code document",
+        "programming",
+    ],
+    "style": [
+        "style profile",
+        "writing style",
+        "my style",
+        "style learn",
+        "learn my style",
+        "writing profile",
+        "how do i write",
+    ],
+    "autoblog": [
+        "auto blog",
+        "auto-blog",
+        "schedule blog",
+        "blog schedule",
+        "blog cron",
+        "cron blog",
+        "auto publish",
+    ],
+    "flow": [
+        "flow",
+        "architecture",
+        "system flow",
+        "show flow",
+        "how does it work",
+        "diagram",
+    ],
 }
 
 
@@ -579,6 +636,102 @@ class CommandParser:
                 ],
                 slots=["content", "url", "extract_type"],
             ),
+            IntentPattern(
+                intent="research",
+                keywords=["research", "investigate", "look up", "deep dive"],
+                patterns=[
+                    r"^research$",
+                    r"research\s+help",
+                    r"research\s+url\s+(.+)",
+                    r"research\s+select\s+(.+)",
+                    r"research\s+(?:analyze|deep)",
+                    r"research\s+sources",
+                    r"research\s+results",
+                    r"(?:research|investigate|look\s+up|find\s+out\s+about)\s+(.+)",
+                ],
+                examples=[
+                    "research artificial intelligence trends",
+                    "research url https://example.com/article",
+                    "research select 1,2,3",
+                    "research analyze",
+                ],
+                slots=["topic", "url"],
+            ),
+            IntentPattern(
+                intent="code",
+                keywords=["code", "coding", "programming", "code template",
+                          "code stats", "code search", "code generate"],
+                patterns=[
+                    r"^code$",
+                    r"^coding$",
+                    r"code\s+help",
+                    r"code\s+template(?:s)?\s*(.*)",
+                    r"code\s+stats\s+(.+)",
+                    r"code\s+search\s+(.+)",
+                    r"code\s+read\s+(.+)",
+                    r"code\s+diff\s+(.+)",
+                    r"code\s+regex\s+(.+)",
+                    r"code\s+(?:generate|explain|review|refactor|document|doc)\s+(.+)",
+                ],
+                examples=[
+                    "code template python-script",
+                    "code stats ~/projects",
+                    "code generate a REST API for user management",
+                    "code review main.py",
+                ],
+                slots=["subcommand", "target"],
+            ),
+            IntentPattern(
+                intent="style",
+                keywords=["style", "writing style", "writing profile"],
+                patterns=[
+                    r"(?:style|writing)\s+profile",
+                    r"(?:my|show)\s+(?:writing\s+)?style",
+                    r"style\s+learn\s*(.*)",
+                    r"learn\s+(?:my\s+)?(?:writing\s+)?style",
+                    r"how\s+do\s+i\s+write",
+                ],
+                examples=[
+                    "style profile",
+                    "my writing style",
+                    "style learn",
+                ],
+                slots=["text"],
+            ),
+            IntentPattern(
+                intent="autoblog",
+                keywords=["auto blog", "auto-blog", "blog schedule", "blog cron"],
+                patterns=[
+                    r"auto[\s-]?blog",
+                    r"(?:schedule|cron)\s+blog",
+                    r"blog\s+(?:schedule|cron)",
+                    r"auto[\s-]?blog\s+(?:add|create|new|list|remove|show)\s*(.*)",
+                ],
+                examples=[
+                    "auto blog",
+                    "schedule blog every Monday at 9am",
+                    "auto blog list",
+                ],
+                slots=["subcommand", "schedule"],
+            ),
+            IntentPattern(
+                intent="flow",
+                keywords=["flow", "architecture", "diagram"],
+                patterns=[
+                    r"^flow$",
+                    r"(?:show|display)\s+(?:system\s+)?flow",
+                    r"(?:system\s+)?architecture",
+                    r"(?:show\s+)?diagram",
+                    r"how\s+does\s+(?:it|this|safeclaw)\s+work",
+                ],
+                examples=[
+                    "flow",
+                    "show system flow",
+                    "architecture",
+                    "how does it work",
+                ],
+                slots=[],
+            ),
         ]
 
         for intent in default_intents:
@@ -854,7 +1007,10 @@ class CommandParser:
                         if not (before_ok and after_ok):
                             continue
 
-                    score = 0.92
+                    # Prefer longer phrase matches: "style learn" should beat
+                    # a bare "code" found later in the text.
+                    specificity = len(phrase) / max(len(text), 1)
+                    score = 0.92 + 0.05 * min(specificity, 1.0)
                     if score > best_score:
                         best_score = score
                         best_intent = intent
