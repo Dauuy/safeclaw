@@ -1379,6 +1379,9 @@ class CommandParser:
         "ai blog generate",
         "ai rewrite blog",
         "ai expand blog",
+        "change title",
+        "set title",
+        "edit blog",
     )
 
     def is_chain(self, text: str) -> bool:

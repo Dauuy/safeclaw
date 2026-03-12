@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 SESSION_AWAITING_CHOICE = "awaiting_choice"
 SESSION_AWAITING_TOPIC = "awaiting_topic"
 SESSION_REVIEWING = "reviewing"
+SESSION_PENDING_PUBLISH = "pending_publish"
 
 
 class BlogAction(BaseAction):
@@ -312,6 +313,9 @@ class BlogAction(BaseAction):
 
         elif state == SESSION_REVIEWING:
             return await self._handle_review(raw_input, lower, user_id, engine)
+
+        elif state == SESSION_PENDING_PUBLISH:
+            return await self._handle_pending_publish(session, raw_input, lower, user_id)
 
         return None
 
@@ -905,7 +909,7 @@ class BlogAction(BaseAction):
     # ── Publishing operations ────────────────────────────────────────────────
 
     async def _publish_remote(self, raw_input: str, user_id: str) -> str:
-        """Publish blog to a remote target (WordPress, Joomla, SFTP, API)."""
+        """Stage a remote publish — show preview and wait for confirmation."""
         # Try to parse an inline target (sftp://... wp://... etc.) before
         # checking configured targets, so setup-free publishing always works.
         inline_target = self._parse_inline_target(raw_input)
@@ -935,25 +939,21 @@ class BlogAction(BaseAction):
         if not content.strip():
             return "Blog draft is empty."
 
-        # Extract target label from command
+        # Resolve target label
         target_match = re.search(
             r'(?:publish|upload|deploy|push)\s+(?:blog\s+)?to\s+(\S+)',
             raw_input, re.IGNORECASE,
         )
-
         target_label = None
         if inline_target:
-            # Use the inline target directly
             target_label = inline_target.label
         elif target_match:
             label = target_match.group(1).lower()
-            # Check if it matches a target label
             if label in self.publisher.targets:
                 target_label = label
             elif label == "all":
-                target_label = None  # Publish to all
+                target_label = None
             else:
-                # Try to match by type
                 for tgt_label, tgt in self.publisher.targets.items():
                     if tgt.target_type.value == label:
                         target_label = tgt_label
@@ -962,7 +962,7 @@ class BlogAction(BaseAction):
                     available = ", ".join(self.publisher.targets.keys())
                     return f"Target '{label}' not found. Available: {available}, or 'all'"
 
-        # Extract title (from command or generate)
+        # Generate title
         title = self._extract_publish_title(raw_input)
         if not title:
             title = self.summarizer.summarize(content, sentences=1).strip()
@@ -970,20 +970,117 @@ class BlogAction(BaseAction):
                 keywords = self.summarizer.get_keywords(content, top_n=5)
                 title = " ".join(w.capitalize() for w in keywords) if keywords else "Untitled Blog Post"
 
+        # Store pending publish state
+        self._set_session(
+            user_id, SESSION_PENDING_PUBLISH,
+            pending_title=title,
+            target_label=target_label,
+        )
+
+        # Show preview
+        word_count = len(content.split())
+        preview = content[:400].strip()
+        if len(content) > 400:
+            preview += "\n... [truncated]"
+        target_info = target_label or "all configured targets"
+
+        return (
+            f"**Ready to Publish**\n\n"
+            f"  Title:  {title}\n"
+            f"  Words:  {word_count}\n"
+            f"  Target: {target_info}\n\n"
+            f"**Preview:**\n{preview}\n\n"
+            f"---\n"
+            f"  **confirm**                    - Publish now\n"
+            f"  **change title** <new title>   - Rename before publishing\n"
+            f"  **edit blog** <new content>    - Edit content first\n"
+            f"  **cancel**                     - Abort\n"
+        )
+
+    async def _handle_pending_publish(
+        self,
+        session: dict[str, Any],
+        raw_input: str,
+        lower: str,
+        user_id: str,
+    ) -> str | None:
+        """Handle input while a publish is staged and awaiting confirmation."""
+        stripped = lower.strip()
+
+        # Confirm → publish
+        if stripped in ("confirm", "yes", "publish", "publish it", "go", "send it", "do it"):
+            title = session.get("pending_title", "Untitled Blog Post")
+            target_label = session.get("target_label")
+            self._clear_session(user_id)
+            return await self._do_publish(title, target_label, user_id)
+
+        # Change title
+        title_match = re.match(r'(?:change\s+)?(?:set\s+)?title\s+(.+)', stripped)
+        if title_match:
+            # Preserve original casing from raw_input
+            new_title = re.sub(r'(?i)^(?:change\s+)?(?:set\s+)?title\s+', '', raw_input).strip()
+            target_label = session.get("target_label")
+            self._set_session(
+                user_id, SESSION_PENDING_PUBLISH,
+                pending_title=new_title,
+                target_label=target_label,
+            )
+            target_info = target_label or "all configured targets"
+            return (
+                f"**Title updated.**\n\n"
+                f"  Title:  {new_title}\n"
+                f"  Target: {target_info}\n\n"
+                f"Type **confirm** to publish or **cancel** to abort."
+            )
+
+        # Cancel
+        if stripped in ("cancel", "no", "abort", "stop", "back", "nevermind"):
+            self._clear_session(user_id)
+            return "Publish cancelled. Your draft is still saved."
+
+        # Any other explicit command — clear session and fall through to normal routing
+        if self._looks_like_command(lower):
+            self._clear_session(user_id)
+            return None
+
+        # Unrecognised input — remind them what's pending
+        title = session.get("pending_title", "Untitled Blog Post")
+        target_info = session.get("target_label") or "all configured targets"
+        return (
+            f"**Pending publish** — \"{title}\" → {target_info}\n\n"
+            f"  **confirm**                    - Publish now\n"
+            f"  **change title** <new title>   - Rename\n"
+            f"  **edit blog** <content>        - Edit content (cancels pending publish)\n"
+            f"  **cancel**                     - Abort\n"
+        )
+
+    async def _do_publish(
+        self,
+        title: str,
+        target_label: str | None,
+        user_id: str,
+    ) -> str:
+        """Execute the actual remote publish after confirmation."""
+        draft_path = self._get_draft_path(user_id)
+        if not draft_path.exists():
+            return "No blog draft found."
+
+        content = self._get_entries_text(draft_path.read_text())
+        if not content.strip():
+            return "Blog draft is empty."
+
         # Generate excerpt
         excerpt = ""
         if self.ai_writer and self.ai_writer.providers:
             resp = await self.ai_writer.generate_excerpt(content)
             if not resp.error:
                 excerpt = resp.content.strip()
-
         if not excerpt:
             excerpt = content[:160].strip()
 
         # Generate slug
         slug = re.sub(r'[^\w\s-]', '', title)[:50].strip().replace(' ', '-').lower()
 
-        # Publish
         results = await self.publisher.publish(
             title=title,
             content=content,
@@ -992,7 +1089,6 @@ class BlogAction(BaseAction):
             slug=slug,
         )
 
-        # Format results
         lines = ["**Blog Published**", ""]
         any_success = False
         for r in results:
