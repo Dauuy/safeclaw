@@ -28,7 +28,7 @@ CLOUD_PROVIDERS = {
     "anthropic": {
         "label": "anthropic",
         "provider": "anthropic",
-        "model": "claude-sonnet-4-20250514",
+        "model": "claude-sonnet-4-5",
         "temperature": 0.7,
         "max_tokens": 2000,
         "key_prefix": "sk-ant-",
