@@ -274,7 +274,14 @@ def main(
 
     # If no subcommand, start interactive CLI
     if ctx.invoked_subcommand is None:
-        asyncio.run(run_cli(config))
+        try:
+            asyncio.run(run_cli(config))
+        except KeyboardInterrupt:
+            pass
+        finally:
+            # Force exit — prevents hanging from lingering threads
+            import os
+            os._exit(0)
 
 
 async def run_cli(config_path: Path | None = None) -> None:
@@ -297,7 +304,13 @@ def run(
 ):
     """Start SafeClaw with configured channels."""
     setup_logging(verbose)
-    asyncio.run(_run_all(config, webhook, telegram))
+    try:
+        asyncio.run(_run_all(config, webhook, telegram))
+    except KeyboardInterrupt:
+        pass
+    finally:
+        import os
+        os._exit(0)
 
 
 async def _run_all(
