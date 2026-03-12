@@ -114,7 +114,7 @@ DEFAULT_MODELS = {
     AIProvider.LOCALAI: "lunademo",
     AIProvider.JAN: "llama3.1-8b",
     AIProvider.OPENAI: "gpt-4o",
-    AIProvider.ANTHROPIC: "claude-sonnet-4-20250514",
+    AIProvider.ANTHROPIC: "claude-sonnet-4-5",
     AIProvider.GOOGLE: "gemini-1.5-flash",
     AIProvider.MISTRAL: "mistral-large-latest",
     AIProvider.GROQ: "llama-3.1-70b-versatile",
@@ -682,7 +682,7 @@ class AIWriter:
             },
             "Anthropic": {
                 "url": "https://console.anthropic.com/settings/keys",
-                "models": "claude-opus-4-20250514, claude-sonnet-4-20250514, claude-haiku-4-20250514",
+                "models": "claude-opus-4-5, claude-sonnet-4-5, claude-haiku-4-5",
             },
             "Google Gemini": {
                 "url": "https://aistudio.google.com/apikey",

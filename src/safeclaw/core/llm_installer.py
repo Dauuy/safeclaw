@@ -28,7 +28,7 @@ CLOUD_PROVIDERS = {
     "anthropic": {
         "label": "anthropic",
         "provider": "anthropic",
-        "model": "claude-sonnet-4-20250514",
+        "model": "claude-sonnet-4-5",
         "temperature": 0.7,
         "max_tokens": 2000,
         "key_prefix": "sk-ant-",
@@ -441,6 +441,30 @@ async def auto_setup(
     if arg == "status":
         return get_status(cfg)
 
+    # "task <task> <provider>" — per-task routing
+    if arg.startswith("task"):
+        rest = arg[4:].strip()
+        parts = rest.split(None, 1)
+        task = parts[0] if parts else ""
+        provider = parts[1].strip() if len(parts) > 1 else ""
+        # "default" clears routing for that task
+        if provider == "default":
+            provider = ""
+            # Remove from config
+            try:
+                if cfg.exists():
+                    with open(cfg) as f:
+                        config = yaml.safe_load(f) or {}
+                    tp = config.get("task_providers") or {}
+                    tp.pop(task, None)
+                    config["task_providers"] = tp
+                    with open(cfg, "w") as f:
+                        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+                return f"Cleared per-task routing for '{task}'. It will use the active provider."
+            except Exception as e:
+                return f"Could not update config: {e}"
+        return setup_task_provider(task, provider, cfg)
+
     # Could be a model preset for local
     if arg in LOCAL_MODELS:
         return await setup_local(arg, cfg)
@@ -457,6 +481,323 @@ async def auto_setup(
         )
 
     return _help()
+
+
+def setup_task_provider(task: str, provider_label: str, config_path: Path) -> str:
+    """
+    Route a specific task to a named AI provider.
+
+    Usage:
+      setup ai task blog my-claude
+      setup ai task research my-ollama
+      setup ai task coding llama-coder
+      setup ai task             ← show current routing
+    """
+    VALID_TASKS = ("blog", "research", "coding")
+
+    if not task:
+        # Show current routing
+        try:
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+        except FileNotFoundError:
+            config = {}
+
+        task_providers = config.get("task_providers", {}) or {}
+        providers = config.get("ai_providers", []) or []
+        available = [p.get("label") for p in providers if isinstance(p, dict) and p.get("label")]
+
+        lines = ["**Per-task AI routing**", ""]
+        for t in VALID_TASKS:
+            assigned = task_providers.get(t, "— (uses active provider)")
+            lines.append(f"  {t:<10}  {assigned}")
+        lines.extend(["", f"Available providers: {', '.join(available) or 'none configured'}",
+                       "", "Set with: setup ai task <blog|research|coding> <provider-label>"])
+        return "\n".join(lines)
+
+    task = task.lower()
+    if task not in VALID_TASKS:
+        return (
+            f"Unknown task '{task}'. Valid tasks: {', '.join(VALID_TASKS)}\n\n"
+            "Example: setup ai task blog my-claude"
+        )
+
+    if not provider_label:
+        return f"Please provide a provider label.\nExample: setup ai task {task} my-claude"
+
+    # Verify the provider exists in config
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        if config_path.exists():
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+        else:
+            config = {}
+    except Exception as e:
+        return f"Could not read config: {e}"
+
+    providers = config.get("ai_providers", []) or []
+    available = [p.get("label") for p in providers if isinstance(p, dict) and p.get("label")]
+    if available and provider_label not in available:
+        return (
+            f"Provider '{provider_label}' not found.\n"
+            f"Available: {', '.join(available)}\n\n"
+            f"Set up a provider first with: setup ai sk-ant-..."
+        )
+
+    task_providers = config.get("task_providers") or {}
+    task_providers[task] = provider_label
+    config["task_providers"] = task_providers
+
+    try:
+        with open(config_path, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+        return (
+            f"**Done!** {task.title()} tasks will now use **{provider_label}**.\n\n"
+            "Other tasks still use the active provider.\n"
+            "Change again with: setup ai task {task} <other-label>\n"
+            "Clear with: setup ai task {task} default"
+        )
+    except Exception as e:
+        return f"Could not save config: {e}"
+
+
+def setup_wolfram(app_id: str, config_path: Path) -> str:
+    """
+    Save a Wolfram Alpha App ID to config.
+
+    Get a free key at: https://developer.wolframalpha.com/
+    Usage: setup wolfram YOUR-APP-ID
+    """
+    if not app_id:
+        return (
+            "**Wolfram Alpha Setup**\n\n"
+            "Get a free App ID at: https://developer.wolframalpha.com/\n\n"
+            "Then run:\n"
+            "  setup wolfram YOUR-APP-ID\n\n"
+            "Wolfram Alpha answers maths, science, conversions, and factual questions."
+        )
+
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        if config_path.exists():
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+        else:
+            config = {}
+
+        apis = config.get("apis") or {}
+        apis["wolfram_alpha"] = app_id.strip()
+        config["apis"] = apis
+
+        with open(config_path, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+        return (
+            "**Wolfram Alpha configured!**\n\n"
+            "Try it:\n"
+            "  research wolfram integrate x^2\n"
+            "  research wolfram distance earth to moon\n"
+            "  research wolfram GDP of Germany"
+        )
+    except Exception as e:
+        return f"Could not save config: {e}"
+
+
+def setup_telegram_allow(
+    target: str,
+    requester_id: str,
+    config_path: Path,
+) -> str:
+    """
+    Add a Telegram user ID to the allowed_users list.
+
+    target       = "me"        → use requester_id (self-register from Telegram)
+    target       = "list"      → show current allowlist
+    target       = "123456789" → add that numeric ID explicitly
+    requester_id               → the Telegram user_id of whoever sent the command
+    """
+    try:
+        if config_path.exists():
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+        else:
+            config = {}
+    except Exception as e:
+        return f"Could not read config: {e}"
+
+    channels = config.get("channels") or {}
+    telegram_cfg = channels.get("telegram") or {}
+
+    # ── list ──────────────────────────────────────────────────────────────
+    if target.lower() == "list":
+        allowed = telegram_cfg.get("allowed_users") or []
+        if not allowed:
+            return (
+                "No user ID restrictions set — the bot is open to anyone who finds it.\n\n"
+                "Send `setup telegram allow me` from Telegram to lock it to just you."
+            )
+        return "**Allowed Telegram user IDs:**\n" + "\n".join(f"  {uid}" for uid in allowed)
+
+    # ── resolve ID ────────────────────────────────────────────────────────
+    if target.lower() == "me":
+        if not requester_id or not requester_id.isdigit():
+            return (
+                "Can't detect your ID from here.\n\n"
+                "Send this command from your Telegram chat with the bot, or:\n"
+                "  setup telegram allow <your-numeric-id>"
+            )
+        new_id = int(requester_id)
+    elif target.isdigit():
+        new_id = int(target)
+    else:
+        return (
+            f"'{target}' is not a valid Telegram user ID.\n\n"
+            "Usage:\n"
+            "  setup telegram allow me          — self-register (send from Telegram)\n"
+            "  setup telegram allow 123456789   — add by numeric ID\n"
+            "  setup telegram allow list        — show current allowlist"
+        )
+
+    # ── add to list ───────────────────────────────────────────────────────
+    allowed = list(telegram_cfg.get("allowed_users") or [])
+    if new_id in allowed:
+        return f"User ID {new_id} is already in the allowlist."
+
+    allowed.append(new_id)
+    telegram_cfg["allowed_users"] = allowed
+    channels["telegram"] = telegram_cfg
+    config["channels"] = channels
+
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(config_path, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    except Exception as e:
+        return f"Could not save config: {e}"
+
+    is_self = target.lower() == "me"
+    extra = " (that's you!)" if is_self else ""
+    return (
+        f"**Done.** User ID {new_id}{extra} added to the allowlist.\n\n"
+        f"Bot now restricted to: {', '.join(str(u) for u in allowed)}\n\n"
+        "Remove with: `setup telegram deny <id>`\n"
+        "Show list:   `setup telegram allow list`"
+    )
+
+
+def setup_telegram_deny(target: str, config_path: Path) -> str:
+    """Remove a Telegram user ID from the allowed_users list."""
+    if not target.isdigit():
+        return (
+            f"'{target}' is not a valid Telegram user ID.\n"
+            "Usage: setup telegram deny 123456789"
+        )
+
+    remove_id = int(target)
+
+    try:
+        if config_path.exists():
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+        else:
+            return "No config file found."
+    except Exception as e:
+        return f"Could not read config: {e}"
+
+    channels = config.get("channels") or {}
+    telegram_cfg = channels.get("telegram") or {}
+    allowed = list(telegram_cfg.get("allowed_users") or [])
+
+    if remove_id not in allowed:
+        return f"User ID {remove_id} is not in the allowlist."
+
+    allowed.remove(remove_id)
+    telegram_cfg["allowed_users"] = allowed if allowed else None
+    channels["telegram"] = telegram_cfg
+    config["channels"] = channels
+
+    try:
+        with open(config_path, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    except Exception as e:
+        return f"Could not save config: {e}"
+
+    if not allowed:
+        return (
+            f"Removed {remove_id}. Allowlist is now empty — "
+            "bot will respond to anyone."
+        )
+    return (
+        f"Removed {remove_id}.\n"
+        f"Remaining allowed IDs: {', '.join(str(u) for u in allowed)}"
+    )
+
+
+def setup_telegram(token: str, config_path: Path) -> str:
+    """
+    Save a Telegram bot token to config.
+
+    Get a token from @BotFather on Telegram:
+      1. Message @BotFather → /newbot
+      2. Choose a name and username
+      3. Copy the token here
+
+    Usage: setup telegram 1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ
+    """
+    if not token:
+        return (
+            "**Telegram Bot Setup**\n\n"
+            "1. Open Telegram and message **@BotFather**\n"
+            "2. Send: /newbot\n"
+            "3. Choose a name (e.g. My SafeClaw) and username (must end in 'bot')\n"
+            "4. Copy the token BotFather gives you\n"
+            "5. Run:\n"
+            "   setup telegram <your-token>\n\n"
+            "Then restart SafeClaw — your bot will be live."
+        )
+
+    # Basic sanity check — Telegram tokens look like 1234567890:ABCdef...
+    if ":" not in token or len(token) < 20:
+        return (
+            "That doesn't look like a valid Telegram token.\n"
+            "Tokens look like:  1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ\n\n"
+            "Get one from @BotFather on Telegram."
+        )
+
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        if config_path.exists():
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+        else:
+            config = {}
+
+        channels = config.get("channels") or {}
+        channels["telegram"] = {
+            "enabled": True,
+            "token": token.strip(),
+        }
+        config["channels"] = channels
+
+        with open(config_path, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+        return (
+            "**Telegram bot configured!**\n\n"
+            "Install the Telegram library if you haven't:\n"
+            "  pip install safeclaw[telegram]\n\n"
+            "Then restart SafeClaw — your bot will start polling.\n\n"
+            "**Restrict access to your user ID** (recommended):\n"
+            "  Send this from your Telegram chat with the bot:\n"
+            "    `setup telegram allow me`\n\n"
+            "Other access commands:\n"
+            "  `setup telegram allow list`        — view allowlist\n"
+            "  `setup telegram allow 123456789`   — add a numeric ID\n"
+            "  `setup telegram deny 123456789`    — remove an ID"
+        )
+    except Exception as e:
+        return f"Could not save config: {e}"
 
 
 def _help() -> str:
@@ -479,7 +820,15 @@ def _help() -> str:
         "  `setup ai local coding`    — Code-optimized\n"
         "  `setup ai local writing`   — Writing-optimized\n\n"
         "**Check status:**\n"
-        "  `setup ai status`"
+        "  `setup ai status`\n\n"
+        "**Per-task routing (use different models for different tasks):**\n"
+        "  `setup ai task blog my-claude`      — use Claude for blogging\n"
+        "  `setup ai task research my-ollama`  — use Ollama for research\n"
+        "  `setup ai task coding llama-coder`  — use a code model for coding\n"
+        "  `setup ai task`                     — show current routing\n\n"
+        "**Other integrations:**\n"
+        "  `setup wolfram <app-id>`   — Wolfram Alpha (free key)\n"
+        "  `setup telegram <token>`   — Telegram bot"
     )
 
 

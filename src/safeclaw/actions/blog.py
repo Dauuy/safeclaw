@@ -26,9 +26,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
+import yaml
+
 from safeclaw.actions.base import BaseAction
 from safeclaw.core.ai_writer import AIWriter, load_ai_writer_from_yaml
-from safeclaw.core.blog_publisher import BlogPublisher
+from safeclaw.core.blog_publisher import BlogPublisher, PublishTarget, PublishTargetType
 from safeclaw.core.crawler import Crawler
 from safeclaw.core.frontpage import FrontPageManager
 from safeclaw.core.summarizer import Summarizer
@@ -43,6 +45,7 @@ logger = logging.getLogger(__name__)
 SESSION_AWAITING_CHOICE = "awaiting_choice"
 SESSION_AWAITING_TOPIC = "awaiting_topic"
 SESSION_REVIEWING = "reviewing"
+SESSION_PENDING_PUBLISH = "pending_publish"
 
 
 class BlogAction(BaseAction):
@@ -207,6 +210,8 @@ class BlogAction(BaseAction):
             return self._ai_switch_provider(raw_input)
 
         # Publishing commands
+        if self._is_setup_publish(lower):
+            return await self._setup_publish(raw_input, user_id, engine)
         if self._is_publish_remote(lower):
             return await self._publish_remote(raw_input, user_id)
         if self._is_list_targets(lower):
@@ -232,7 +237,14 @@ class BlogAction(BaseAction):
         if self._is_publish(lower):
             return self._publish_blog(raw_input, user_id)
 
-        # Default: treat as writing blog news
+        # Default: treat as writing blog news — but not if it looks like a question
+        if self._is_question(lower):
+            if engine.nlu:
+                answer = await engine.nlu.answer_question(raw_input, engine.get_help())
+                if answer:
+                    return answer
+            return self._help_text()
+
         content = self._extract_blog_content(raw_input)
         if content:
             return await self._write_blog_news(raw_input, user_id, engine)
@@ -312,6 +324,9 @@ class BlogAction(BaseAction):
 
         elif state == SESSION_REVIEWING:
             return await self._handle_review(raw_input, lower, user_id, engine)
+
+        elif state == SESSION_PENDING_PUBLISH:
+            return await self._handle_pending_publish(session, raw_input, lower, user_id)
 
         return None
 
@@ -402,7 +417,7 @@ class BlogAction(BaseAction):
         self, raw_input: str, user_id: str, engine: "SafeClaw"
     ) -> str | None:
         """Handle topic input for AI blog generation (awaiting_topic state)."""
-        topic = raw_input.strip()
+        topic = re.sub(r'(?i)^please\s+', '', raw_input).strip()
 
         if not topic:
             return "Please type a topic for your blog post:"
@@ -450,13 +465,14 @@ class BlogAction(BaseAction):
             "\n"
             "**What would you like to do?**\n"
             "\n"
-            "  **edit blog** <your changes>  - Replace with your edits\n"
-            "  **ai rewrite blog**           - Have AI polish/rewrite it\n"
-            "  **ai expand blog**            - Have AI make it longer\n"
-            "  **publish blog**              - Save as .txt locally\n"
-            "  **publish blog to <target>**  - Publish to WordPress/Joomla/SFTP\n"
-            "  **ai headlines**              - Generate headline options\n"
-            "  **blog**                      - Start over\n"
+            "  **edit blog** <your changes>               - Replace with your edits\n"
+            "  **ai rewrite blog**                        - Have AI polish/rewrite it\n"
+            "  **ai expand blog**                         - Have AI make it longer\n"
+            "  **ai headlines**                           - Generate headline options\n"
+            "  **publish blog**                           - Save as .txt locally\n"
+            "  **publish blog to wp://site.com u pass**   - Publish (shows preview first)\n"
+            "  **publish blog to <saved-target>**         - Publish to configured target\n"
+            "  **blog**                                   - Start over\n"
             "\n"
             "Or just type more text to add to the draft."
         )
@@ -645,6 +661,14 @@ class BlogAction(BaseAction):
             text,
         ))
 
+    def _is_setup_publish(self, text: str) -> bool:
+        return bool(re.search(
+            r"setup\s+(blog\s+)?publish|"
+            r"setup\s+publish\s+blog|"
+            r"(save|add|store)\s+(blog\s+)?publish\s+target",
+            text,
+        ))
+
     def _is_list_targets(self, text: str) -> bool:
         return bool(re.search(
             r"(list|show)\s+(publish|upload|deploy)\s*targets?|"
@@ -688,10 +712,12 @@ class BlogAction(BaseAction):
 
         # Extract topic from command
         topic = re.sub(
-            r'(?i)(ai\s+)?(blog\s+)?(generate|write|create|draft)\s+(a\s+)?(blog\s+)?(post\s+)?(about|on|for)?\s*',
+            r'(?i)(please\s+)?(ai\s+)?(blog\s+)?(generate|write|create|draft)\s+(a\s+)?(blog\s+)?(post\s+)?(about|on|for)?\s*',
             '',
             raw_input,
         ).strip()
+        # Strip any remaining polite prefix
+        topic = re.sub(r'(?i)^please\s+', '', topic).strip()
 
         if not topic:
             return "Please provide a topic. Example: ai blog generate about sustainable technology trends"
@@ -904,20 +930,235 @@ class BlogAction(BaseAction):
 
     # ── Publishing operations ────────────────────────────────────────────────
 
+    # ── Publish target setup (saves to config, no YAML editing needed) ──────
+
+    async def _setup_publish(self, raw_input: str, user_id: str, engine: "SafeClaw") -> str:
+        """
+        Set up a permanent publish target without touching config files.
+
+        Usage:
+          setup blog publish wp://mysite.com user pass
+          setup blog publish sftp://host user pass /remote/path
+          setup blog publish joomla://cms.example.com user token
+          setup blog publish api://api.example.com/posts api-key
+          setup blog publish list
+          setup blog publish remove <label>
+        """
+        lower = raw_input.lower().strip()
+
+        # List saved targets
+        if re.search(r'\b(list|show|ls)\b', lower.split("publish", 1)[-1]):
+            return self._list_publish_targets()
+
+        # Remove a target
+        remove_m = re.search(r'\b(?:remove|delete|rm)\s+(\S+)', lower)
+        if remove_m:
+            label = remove_m.group(1)
+            return self._remove_publish_target(label, engine)
+
+        # Parse inline target from command
+        target = self._parse_inline_target(raw_input)
+        if not target:
+            return self._setup_publish_help()
+
+        # Save to config.yaml for persistence
+        saved = self._save_publish_target_to_config(target, engine)
+
+        # Also register in-memory so it's usable immediately without restart
+        if not self.publisher:
+            self.publisher = BlogPublisher()
+        self.publisher.add_target(target)
+
+        location = target.url or target.sftp_host
+        if saved:
+            return (
+                f"**Publish target saved!**\n\n"
+                f"  Label:    {target.label}\n"
+                f"  Type:     {target.target_type.value}\n"
+                f"  Location: {location}\n\n"
+                f"Use it any time:\n"
+                f"  publish blog to {target.label}\n"
+                f"  publish blog to all\n\n"
+                f"Remove later with:  setup blog publish remove {target.label}\n"
+                f"List all targets:   setup blog publish list"
+            )
+        else:
+            return (
+                f"**Target active this session** (could not write to config).\n\n"
+                f"  Label:    {target.label}\n"
+                f"  Type:     {target.target_type.value}\n"
+                f"  Location: {location}\n\n"
+                f"To save permanently add to config/config.yaml under publish_targets."
+            )
+
+    def _is_publish_question(self, text: str) -> bool:
+        return bool(re.search(
+            r'how\s+(do\s+i|can\s+i|to)\s+(publish|upload|deploy|post|send)|'
+            r'(publish|upload|deploy)\s+(to\s+)?(sftp|ftp|wordpress|wp|joomla|server|remote|site|my\s+site)|'
+            r'(sftp|ftp)\s+(publish|upload|how|setup|configure)',
+            text,
+        ))
+
+    def _publish_how_to(self, text: str) -> str:
+        if re.search(r'\b(sftp|ftp)\b', text):
+            return (
+                "**Publish to SFTP**\n\n"
+                "1. Register your server once:\n"
+                "   `setup blog publish sftp://your-host.com user password /remote/path`\n\n"
+                "   With a custom port:\n"
+                "   `setup blog publish sftp://your-host.com:2222 user password /remote/path`\n\n"
+                "2. Then publish any time:\n"
+                "   `publish blog to your-host.com`\n\n"
+                "The bot previews the title first and asks for confirmation before uploading.\n\n"
+                "**Other targets:** WordPress, Joomla, custom API\n"
+                "  `setup blog publish` — see all options"
+            )
+        if re.search(r'\b(wordpress|wp)\b', text):
+            return (
+                "**Publish to WordPress**\n\n"
+                "1. Generate an application password in WordPress:\n"
+                "   WordPress Admin → Users → Profile → Application Passwords\n\n"
+                "2. Register it once:\n"
+                "   `setup blog publish wp://yoursite.com username app-password`\n\n"
+                "3. Then publish any time:\n"
+                "   `publish blog to yoursite.com`\n\n"
+                "**Other targets:** SFTP, Joomla, custom API\n"
+                "  `setup blog publish` — see all options"
+            )
+        return self._setup_publish_help()
+
+    def _setup_publish_help(self) -> str:
+        return (
+            "**Setup a permanent publish target — no config files needed**\n\n"
+            "  setup blog publish wp://mysite.com user app-password\n"
+            "  setup blog publish sftp://host:port user pass /remote/path\n"
+            "  setup blog publish joomla://cms.example.com user token\n"
+            "  setup blog publish api://api.example.com/posts api-key\n\n"
+            "After setup, publish any time with:\n"
+            "  publish blog to <label>\n"
+            "  publish blog to all\n\n"
+            "Other setup commands:\n"
+            "  setup blog publish list          - Show saved targets\n"
+            "  setup blog publish remove <label> - Remove a target"
+        )
+
+    def _save_publish_target_to_config(self, target: PublishTarget, engine: "SafeClaw") -> bool:
+        """Write a publish target into config.yaml so it survives restarts."""
+        config_path = getattr(engine, "config_path", None)
+        if not config_path:
+            return False
+        try:
+            config_path = Path(config_path)
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+
+            if config_path.exists():
+                with open(config_path) as f:
+                    config = yaml.safe_load(f) or {}
+            else:
+                config = {}
+
+            targets = config.get("publish_targets") or []
+
+            # Build a minimal dict — only include non-default fields
+            t_dict: dict = {
+                "label": target.label,
+                "type": target.target_type.value,
+            }
+            if target.url:
+                t_dict["url"] = target.url
+            if target.username:
+                t_dict["username"] = target.username
+            if target.password:
+                t_dict["password"] = target.password
+            if target.api_key:
+                t_dict["api_key"] = target.api_key
+            if target.sftp_host:
+                t_dict["sftp_host"] = target.sftp_host
+            if target.sftp_port != 22:
+                t_dict["sftp_port"] = target.sftp_port
+            if target.sftp_user:
+                t_dict["sftp_user"] = target.sftp_user
+            if target.sftp_password:
+                t_dict["sftp_password"] = target.sftp_password
+            if target.sftp_key_path:
+                t_dict["sftp_key_path"] = target.sftp_key_path
+            if target.sftp_remote_path != "/var/www/html/blog":
+                t_dict["sftp_remote_path"] = target.sftp_remote_path
+
+            # Update existing or append
+            for i, t in enumerate(targets):
+                if isinstance(t, dict) and t.get("label") == target.label:
+                    targets[i] = t_dict
+                    break
+            else:
+                targets.append(t_dict)
+
+            config["publish_targets"] = targets
+            with open(config_path, "w") as f:
+                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+            # Keep engine config in sync so the change is live immediately
+            engine.config["publish_targets"] = targets
+
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save publish target: {e}")
+            return False
+
+    def _remove_publish_target(self, label: str, engine: "SafeClaw") -> str:
+        """Remove a publish target from config.yaml and from memory."""
+        removed_memory = False
+        if self.publisher and label in self.publisher.targets:
+            del self.publisher.targets[label]
+            removed_memory = True
+
+        config_path = getattr(engine, "config_path", None)
+        if not config_path or not Path(config_path).exists():
+            if removed_memory:
+                return f"Removed '{label}' from this session (it was not in saved config)."
+            return f"Target '{label}' not found."
+
+        try:
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+
+            targets = config.get("publish_targets") or []
+            original_len = len(targets)
+            targets = [t for t in targets if not (isinstance(t, dict) and t.get("label") == label)]
+
+            if len(targets) == original_len and not removed_memory:
+                return f"Target '{label}' not found. Use 'setup blog publish list' to see targets."
+
+            config["publish_targets"] = targets
+            with open(config_path, "w") as f:
+                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+            engine.config["publish_targets"] = targets
+
+            return f"Removed publish target **{label}**."
+        except Exception as e:
+            return f"Error removing target: {e}"
+
     async def _publish_remote(self, raw_input: str, user_id: str) -> str:
-        """Publish blog to a remote target (WordPress, Joomla, SFTP, API)."""
+        """Stage a remote publish — show preview and wait for confirmation."""
+        # Try to parse an inline target (sftp://... wp://... etc.) before
+        # checking configured targets, so setup-free publishing always works.
+        inline_target = self._parse_inline_target(raw_input)
+        if inline_target:
+            if not self.publisher:
+                self.publisher = BlogPublisher()
+            self.publisher.add_target(inline_target)
+
         if not self.publisher or not self.publisher.targets:
             return (
                 "No publishing targets configured.\n\n"
-                "Add targets in config/config.yaml under publish_targets.\n"
-                "Supported: wordpress, joomla, sftp, api\n\n"
-                "Example:\n"
-                "  publish_targets:\n"
-                "    - label: my-wordpress\n"
-                "      type: wordpress\n"
-                "      url: https://mysite.com\n"
-                "      username: admin\n"
-                "      password: xxxx xxxx xxxx xxxx"
+                "You can publish inline without any config:\n"
+                "  publish blog to sftp://host username password\n"
+                "  publish blog to sftp://host:port username password /remote/path\n"
+                "  publish blog to wp://mysite.com username password\n"
+                "  publish blog to wordpress://mysite.com username password\n"
+                "  publish blog to joomla://mysite.com username password\n"
+                "  publish blog to api://mysite.com/endpoint api_key\n\n"
+                "Or add permanent targets in config/config.yaml under publish_targets."
             )
 
         draft_path = self._get_draft_path(user_id)
@@ -928,22 +1169,21 @@ class BlogAction(BaseAction):
         if not content.strip():
             return "Blog draft is empty."
 
-        # Extract target label from command
+        # Resolve target label
         target_match = re.search(
             r'(?:publish|upload|deploy|push)\s+(?:blog\s+)?to\s+(\S+)',
             raw_input, re.IGNORECASE,
         )
-
         target_label = None
-        if target_match:
+        if inline_target:
+            target_label = inline_target.label
+        elif target_match:
             label = target_match.group(1).lower()
-            # Check if it matches a target label
             if label in self.publisher.targets:
                 target_label = label
             elif label == "all":
-                target_label = None  # Publish to all
+                target_label = None
             else:
-                # Try to match by type
                 for tgt_label, tgt in self.publisher.targets.items():
                     if tgt.target_type.value == label:
                         target_label = tgt_label
@@ -952,7 +1192,7 @@ class BlogAction(BaseAction):
                     available = ", ".join(self.publisher.targets.keys())
                     return f"Target '{label}' not found. Available: {available}, or 'all'"
 
-        # Extract title (from command or generate)
+        # Generate title
         title = self._extract_publish_title(raw_input)
         if not title:
             title = self.summarizer.summarize(content, sentences=1).strip()
@@ -960,20 +1200,125 @@ class BlogAction(BaseAction):
                 keywords = self.summarizer.get_keywords(content, top_n=5)
                 title = " ".join(w.capitalize() for w in keywords) if keywords else "Untitled Blog Post"
 
+        # Store pending publish state
+        self._set_session(
+            user_id, SESSION_PENDING_PUBLISH,
+            pending_title=title,
+            target_label=target_label,
+        )
+
+        # Show preview
+        word_count = len(content.split())
+        preview = content[:400].strip()
+        if len(content) > 400:
+            preview += "\n... [truncated]"
+        target_info = target_label or "all configured targets"
+
+        return (
+            f"**Ready to Publish**\n\n"
+            f"  Title:  {title}\n"
+            f"  Words:  {word_count}\n"
+            f"  Target: {target_info}\n\n"
+            f"**Preview:**\n{preview}\n\n"
+            f"---\n"
+            f"  **confirm**                    - Publish now\n"
+            f"  **change title** <new title>   - Rename before publishing\n"
+            f"  **edit blog** <new content>    - Edit content first\n"
+            f"  **cancel**                     - Abort\n"
+        )
+
+    async def _handle_pending_publish(
+        self,
+        session: dict[str, Any],
+        raw_input: str,
+        lower: str,
+        user_id: str,
+    ) -> str | None:
+        """Handle input while a publish is staged and awaiting confirmation."""
+        stripped = lower.strip()
+
+        # Confirm → publish
+        if stripped in ("confirm", "yes", "publish", "publish it", "go", "send it", "do it"):
+            title = session.get("pending_title", "Untitled Blog Post")
+            target_label = session.get("target_label")
+            self._clear_session(user_id)
+            return await self._do_publish(title, target_label, user_id)
+
+        # Change title
+        title_match = re.match(r'(?:change\s+)?(?:set\s+)?title\s+(.+)', stripped)
+        if title_match:
+            # Preserve original casing from raw_input
+            new_title = re.sub(r'(?i)^(?:change\s+)?(?:set\s+)?title\s+', '', raw_input).strip()
+            target_label = session.get("target_label")
+            self._set_session(
+                user_id, SESSION_PENDING_PUBLISH,
+                pending_title=new_title,
+                target_label=target_label,
+            )
+            target_info = target_label or "all configured targets"
+            return (
+                f"**Title updated.**\n\n"
+                f"  Title:  {new_title}\n"
+                f"  Target: {target_info}\n\n"
+                f"Type **confirm** to publish or **cancel** to abort."
+            )
+
+        # Cancel
+        if stripped in ("cancel", "no", "abort", "stop", "back", "nevermind"):
+            self._clear_session(user_id)
+            return "Publish cancelled. Your draft is still saved."
+
+        # Any other explicit command — clear session and fall through to normal routing
+        if self._looks_like_command(lower):
+            self._clear_session(user_id)
+            return None
+
+        # Unrecognised input — remind them what's pending
+        title = session.get("pending_title", "Untitled Blog Post")
+        target_info = session.get("target_label") or "all configured targets"
+        return (
+            f"**Pending publish** — \"{title}\" → {target_info}\n\n"
+            f"  **confirm**                    - Publish now\n"
+            f"  **change title** <new title>   - Rename\n"
+            f"  **edit blog** <content>        - Edit content (cancels pending publish)\n"
+            f"  **cancel**                     - Abort\n"
+        )
+
+    async def _do_publish(
+        self,
+        title: str,
+        target_label: str | None,
+        user_id: str,
+    ) -> str:
+        """Execute the actual remote publish after confirmation."""
+        if not self.publisher or not self.publisher.targets:
+            return (
+                "Publishing target is no longer available (session may have been restored after restart).\n"
+                "Please re-issue the publish command:\n"
+                "  publish blog to wp://mysite.com user pass\n"
+                "  publish blog to sftp://host user pass"
+            )
+
+        draft_path = self._get_draft_path(user_id)
+        if not draft_path.exists():
+            return "No blog draft found."
+
+        content = self._get_entries_text(draft_path.read_text())
+        if not content.strip():
+            return "Blog draft is empty."
+
         # Generate excerpt
         excerpt = ""
         if self.ai_writer and self.ai_writer.providers:
             resp = await self.ai_writer.generate_excerpt(content)
             if not resp.error:
                 excerpt = resp.content.strip()
-
         if not excerpt:
             excerpt = content[:160].strip()
 
         # Generate slug
         slug = re.sub(r'[^\w\s-]', '', title)[:50].strip().replace(' ', '-').lower()
 
-        # Publish
         results = await self.publisher.publish(
             title=title,
             content=content,
@@ -982,7 +1327,6 @@ class BlogAction(BaseAction):
             slug=slug,
         )
 
-        # Format results
         lines = ["**Blog Published**", ""]
         any_success = False
         for r in results:
@@ -998,6 +1342,82 @@ class BlogAction(BaseAction):
             lines.extend(["", "Use 'set front page <post_id> on <target>' to feature this post."])
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _parse_inline_target(raw_input: str) -> PublishTarget | None:
+        """
+        Parse an inline publish target from the command string.
+
+        Supported syntax:
+          publish blog to sftp://host username password
+          publish blog to sftp://host:port username password
+          publish blog to sftp://host:port username password /remote/path
+          publish blog to wp://https://mysite.com username password
+          publish blog to wordpress://mysite.com username password
+          publish blog to joomla://mysite.com username password
+          publish blog to api://mysite.com/endpoint api_key
+        """
+        # Match scheme://... followed by optional tokens
+        m = re.search(
+            r'(?:publish|upload|deploy|push)\s+(?:blog\s+)?to\s+'
+            r'(sftp|wp|wordpress|joomla|api)://([\S]+?)(?:\s+(\S+)(?:\s+(\S+)(?:\s+(\S+))?)?)?$',
+            raw_input.strip(), re.IGNORECASE,
+        )
+        if not m:
+            return None
+
+        scheme = m.group(1).lower()
+        host_part = m.group(2).rstrip('/')
+        token1 = m.group(3) or ""   # username / api_key
+        token2 = m.group(4) or ""   # password
+        token3 = m.group(5) or ""   # remote path (sftp only)
+
+        if scheme == "sftp":
+            host, _, port_str = host_part.partition(":")
+            port = int(port_str) if port_str.isdigit() else 22
+            return PublishTarget(
+                label=f"sftp-{host}",
+                target_type=PublishTargetType.SFTP,
+                sftp_host=host,
+                sftp_port=port,
+                sftp_user=token1,
+                sftp_password=token2,
+                sftp_remote_path=token3 or "/var/www/html/blog",
+            )
+
+        if scheme in ("wp", "wordpress"):
+            url = host_part if host_part.startswith("http") else f"https://{host_part}"
+            domain = urlparse(url).netloc or host_part.split('/')[0]
+            return PublishTarget(
+                label=f"wp-{domain}",
+                target_type=PublishTargetType.WORDPRESS,
+                url=url,
+                username=token1,
+                password=token2,
+            )
+
+        if scheme == "joomla":
+            url = host_part if host_part.startswith("http") else f"https://{host_part}"
+            domain = urlparse(url).netloc or host_part.split('/')[0]
+            return PublishTarget(
+                label=f"joomla-{domain}",
+                target_type=PublishTargetType.JOOMLA,
+                url=url,
+                username=token1,
+                password=token2,
+            )
+
+        if scheme == "api":
+            url = host_part if host_part.startswith("http") else f"https://{host_part}"
+            domain = urlparse(url).netloc or host_part.split('/')[0]
+            return PublishTarget(
+                label=f"api-{domain}",
+                target_type=PublishTargetType.API,
+                url=url,
+                api_key=token1,
+            )
+
+        return None
 
     def _extract_publish_title(self, raw_input: str) -> str:
         """Extract a custom title from the publish command."""
@@ -1428,6 +1848,10 @@ class BlogAction(BaseAction):
             lines.extend(["", "**Publishing targets:**"])
             for label, t in self.publisher.targets.items():
                 lines.append(f"  - {label} ({t.target_type.value})")
+            lines.append("  setup blog publish list  — manage targets")
+        else:
+            lines.extend(["", "**No publish targets saved.**",
+                          "  setup blog publish wp://mysite.com user pass  — add one"])
 
         # Show AI status
         if self.ai_writer and self.ai_writer.providers:
@@ -1473,6 +1897,18 @@ class BlogAction(BaseAction):
             if line.strip():
                 lines.append(line.strip())
         return "\n".join(lines)
+
+    def _is_question(self, text: str) -> bool:
+        """Return True if input looks like a question rather than blog content."""
+        return bool(re.search(
+            r'\?$|'
+            r'\b(how\s+(do|can|to|does|did|would|should)|'
+            r'what\s+(is|are|does|can|should)|'
+            r'why\s+(is|are|does|do)|'
+            r'where\s+(do|can|is)|'
+            r'can\s+i|should\s+i)\b',
+            text,
+        ))
 
     def _extract_blog_content(self, raw_input: str) -> str:
         """Extract blog content from natural language input."""
@@ -1521,21 +1957,33 @@ class BlogAction(BaseAction):
                 "  ai providers  - See cloud AI providers and API key setup\n"
             )
 
-        publish_section = ""
         if self.publisher and self.publisher.targets:
             targets = ", ".join(self.publisher.targets.keys())
             publish_section = (
-                f"\n**Publish remotely ({targets}):**\n"
-                "  publish blog to <target>        - Publish to specific target\n"
-                "  publish blog to all             - Publish to all targets\n"
-                "  list publish targets            - Show configured targets\n"
+                f"\n**Saved publish targets ({targets}):**\n"
+                "  publish blog to <target>              - Publish to a specific target\n"
+                "  publish blog to all                   - Publish to all targets\n"
+                "  setup blog publish list               - Show all saved targets\n"
+                "  setup blog publish remove <label>     - Remove a target\n"
+                "\n**One-off publish (not saved):**\n"
+                "  publish blog to wp://mysite.com user pass\n"
+                "  publish blog to sftp://host user pass /path\n"
             )
         else:
             publish_section = (
-                "\n**Publishing (not configured):**\n"
-                "  Supports: WordPress, Joomla, SFTP, generic API\n"
-                "  Add publish_targets in config/config.yaml\n"
+                "\n**Set up a publish target (saved — no config file needed):**\n"
+                "  setup blog publish wp://mysite.com user app-password\n"
+                "  setup blog publish sftp://host user pass\n"
+                "  setup blog publish joomla://cms.example.com user token\n"
+                "  setup blog publish api://api.example.com/posts api-key\n"
+                "\n**Or publish one-off without saving:**\n"
+                "  publish blog to wp://mysite.com user pass\n"
+                "  publish blog to sftp://host:port user pass /path\n"
             )
+        publish_section += (
+            "\n  After any publish command you'll see a preview.\n"
+            "  confirm / change title <new> / edit blog / cancel\n"
+        )
 
         frontpage_section = ""
         if self.frontpage:

@@ -15,8 +15,8 @@ SafeClaw uses VADER, spaCy, sumy, YOLO, Whisper, Piper, and other battle-tested 
 | | SafeClaw | OpenClaw |
 |---|---|---|
 | **Monthly cost** | **$0** | $100–$3,600+ |
-| **Requires LLM** | No (optional for AI blog) | Yes |
-| **Prompt injection risk** | **Minimal** (only if LLM research enabled) | Yes (everywhere) |
+| **Requires LLM** | No (optional for AI blog/NLU) | Yes |
+| **Prompt injection risk** | **Minimal** (only if LLM NLU/research enabled) | Yes (everywhere) |
 | **Works offline** | **Yes** (core features) | No |
 | **Runs on any machine** | **Yes** (Linux, macOS, Windows) | Needs powerful hardware or cloud APIs |
 | **Deterministic output** | **Yes** | No (LLM responses vary) |
@@ -122,6 +122,39 @@ SafeClaw uses VADER, spaCy, sumy, YOLO, Whisper, Piper, and other battle-tested 
 * **Shorthand** — "tmrw" → "tomorrow", "hrs" → "hours", "mins" → "minutes"
 * **Auto-learns from mistakes** — If a command fails and you retype it correctly, SafeClaw remembers the mapping for next time
 * **No AI needed** — All corrections are rule-based and deterministic
+
+### 💬 Optional LLM Command Understanding (NLU)
+Don't want to memorise command syntax? Enable the NLU bridge and just talk naturally:
+
+```
+# Without NLU — you have to know the exact phrase:
+remind me tomorrow at 9am to call the dentist
+
+# With NLU enabled — any phrasing works:
+hey, can you remind me to call the dentist tomorrow morning at 9?
+I need a reminder for tomorrow at 9 to call the dentist
+put a 9am reminder tomorrow: dentist call
+```
+
+The NLU bridge uses your configured LLM (any provider) as a **pure translator**:
+it converts what you typed into the closest matching SafeClaw command string,
+which then goes through the same rule-based parser as always. The LLM never
+executes anything directly — it only re-words your input.
+
+Enable in `config/config.yaml`:
+
+```yaml
+safeclaw:
+  nlu:
+    enabled: true
+    provider: my-claude        # optional — uses active provider if omitted
+    temperature: 0.0           # deterministic output
+    show_translation: true     # shows "_(understood as: remind me ...)_" prefix
+```
+
+**Privacy note:** When NLU is enabled, unrecognised commands are sent to your
+configured LLM provider. Recognised commands (the vast majority) are still
+handled entirely locally with zero tokens consumed.
 
 ### ✍️ Writing Style Profiler
 * **Learn your voice** — Feed SafeClaw your writing and it builds a 35-metric profile (sentence length, vocabulary, formality, contractions, structure, favorite words, etc.)
@@ -322,7 +355,8 @@ safeclaw --verbose
 > blog                              # Interactive blog menu (AI or manual)
 > ai blog generate about home automation            # AI writes a full post
 > ai rewrite blog                   # AI polishes your draft
-> publish blog to my-wordpress      # Publish to WordPress
+> publish blog to wp://mysite.com admin pass  # Publish inline — no config needed
+> publish blog to my-wordpress               # Or use a saved target from config
 > style learn I write concise, punchy posts.        # Teach SafeClaw your style
 > style profile                     # View your writing profile
 > research WebAssembly performance  # Search arXiv + Scholar + Wolfram
@@ -751,11 +785,43 @@ ollama pull llama3.1
   [full article here]
   ---
   What would you like to do?
-    edit blog <changes>     - Replace with your edits
-    ai rewrite blog         - Have AI polish/rewrite it
-    ai expand blog          - Have AI make it longer
-    publish blog            - Save as .txt locally
-    publish blog to <target>- Publish to WordPress/Joomla/SFTP
+    edit blog <changes>                      - Replace with your edits
+    ai rewrite blog                          - Have AI polish/rewrite it
+    ai expand blog                           - Have AI make it longer
+    publish blog                             - Save as .txt locally
+    publish blog to wp://mysite.com u pass   - Publish (shows preview first)
+    publish blog to <saved-target>           - Publish to configured target
+
+> publish blog to wp://mysite.com admin mypassword
+  Ready to Publish
+
+    Title:  Sustainable Technology Trends in 2026
+    Words:  847
+    Target: wp-mysite.com
+
+  Preview:
+  The clean energy revolution is accelerating...
+  ... [truncated]
+
+  ---
+    confirm                    - Publish now
+    change title <new title>   - Rename before publishing
+    edit blog <new content>    - Edit content first
+    cancel                     - Abort
+
+> change title The Green Tech Surge: What's Coming in 2026
+  Title updated.
+
+    Title:  The Green Tech Surge: What's Coming in 2026
+    Target: wp-mysite.com
+
+  Type confirm to publish or cancel to abort.
+
+> confirm
+  Blog Published
+
+    wp-mysite.com (wordpress): Post published successfully
+    URL: https://mysite.com/the-green-tech-surge
 ```
 
 **AI Commands:**
@@ -778,7 +844,29 @@ ollama pull llama3.1
 
 Publish your blog (from either mode) to WordPress, Joomla, any SFTP server, or a generic API endpoint.
 
-**Setup:** Add one or more targets to `config/config.yaml` under `publish_targets`:
+**No config needed — publish inline:**
+
+```
+publish blog to sftp://192.168.1.1 myuser mypassword
+publish blog to sftp://host:2222 myuser mypassword /var/www/html
+publish blog to wp://mysite.com admin myapppassword
+publish blog to wordpress://mysite.com admin myapppassword
+publish blog to joomla://mysite.com admin mypassword
+publish blog to api://mysite.com/endpoint myapikey
+```
+
+Every publish command shows a **pre-publish preview** first — title, word count, content snippet, and target. You can then:
+
+| Reply | Effect |
+|---|---|
+| `confirm` | Publish with the current title |
+| `change title <new title>` | Rename and re-preview |
+| `edit blog <content>` | Edit draft (cancels pending publish) |
+| `cancel` | Abort without publishing |
+
+Inline targets are remembered for the session under an auto-generated label (e.g. `wp-mysite.com`), so `publish blog to wp-mysite.com` works for subsequent posts without re-typing credentials.
+
+**Permanent targets** (optional — add to `config/config.yaml` under `publish_targets`):
 
 ```yaml
 publish_targets:
@@ -816,8 +904,15 @@ publish_targets:
 
 | Command | Description |
 |---|---|
-| `publish blog to my-wordpress` | Publish to a specific target |
-| `publish blog to all` | Publish to all enabled targets |
+| `publish blog to wp://site.com user pass` | Publish to WordPress inline (no config) |
+| `publish blog to sftp://host user pass` | Publish via SFTP inline |
+| `publish blog to joomla://site.com user pass` | Publish to Joomla inline |
+| `publish blog to api://endpoint key` | Publish to generic API inline |
+| `publish blog to <saved-label>` | Publish to a target saved in config |
+| `publish blog to all` | Publish to all enabled saved targets |
+| `confirm` | Confirm a staged publish |
+| `change title <new title>` | Change the title before confirming |
+| `cancel` | Cancel a staged publish |
 | `list publish targets` | Show configured targets |
 | `set front page <id> on <target>` | Set which post is the home page |
 | `show front page` | Show current front page setting |

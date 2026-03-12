@@ -875,20 +875,23 @@ class CommandParser:
             IntentPattern(
                 intent="llm_setup",
                 keywords=["install llm", "install ai", "setup llm", "setup ai",
-                          "install ollama", "setup ollama", "llm status", "ai status"],
+                          "install ollama", "setup ollama", "llm status", "ai status",
+                          "setup wolfram", "setup telegram", "setup ai task"],
                 patterns=[
                     r"install\s+(?:llm|ai|ollama)\s*(.*)",
                     r"setup\s+(?:llm|ai|ollama)\s*(.*)",
+                    r"setup\s+(?:wolfram|telegram)\s*(.*)",
                     r"(?:llm|ai|ollama)\s+(?:status|setup|install)\s*(.*)",
                     r"(?:get|download)\s+(?:llm|ai|ollama)\s*(.*)",
                     r"local\s+ai\s*(.*)",
                 ],
                 examples=[
                     "install llm",
-                    "install llm small",
                     "setup ai",
+                    "setup wolfram YOUR-APP-ID",
+                    "setup telegram 1234:ABCdef",
+                    "setup ai task blog my-claude",
                     "llm status",
-                    "install ollama",
                 ],
                 slots=["model"],
             ),
@@ -1339,6 +1342,13 @@ class CommandParser:
         """
         text = normalize_text(text.strip())
 
+        # Text-consuming commands must never be split — any chain operators
+        # in their content belong to the argument, not the command chain.
+        lowered = text.lower()
+        if any(lowered.startswith(p) for p in self._TEXT_CONSUMING_PREFIXES):
+            cmd = self.parse(text, user_id)
+            return CommandChain(commands=[cmd], chain_type="none")
+
         # Split into segments
         segments, chain_type = self._split_chain(text)
 
@@ -1367,6 +1377,26 @@ class CommandParser:
         logger.debug(f"Parsed chain with {len(commands)} commands ({chain_type})")
         return CommandChain(commands=commands, chain_type=chain_type)
 
+    # Commands that consume all remaining text as their argument.
+    # Chain detection must not fire for these — any "then", "|", etc.
+    # in the input belongs to the content, not the command chain.
+    _TEXT_CONSUMING_PREFIXES = (
+        "learn writing style",
+        "learn my style",
+        "style learn",
+        "write blog",
+        "ai blog generate about",
+        "ai blog generate",
+        "ai rewrite blog",
+        "ai expand blog",
+        "change title",
+        "set title",
+        "edit blog",
+    )
+
     def is_chain(self, text: str) -> bool:
         """Check if text contains a command chain."""
+        lowered = text.lower().strip()
+        if any(lowered.startswith(p) for p in self._TEXT_CONSUMING_PREFIXES):
+            return False
         return self._detect_chain(text) is not None
