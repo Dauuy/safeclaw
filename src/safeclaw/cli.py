@@ -226,32 +226,28 @@ async def _flow_action(
 async def _llm_setup_action(
     params: dict, user_id: str, channel: str, engine: SafeClaw
 ) -> str:
-    """Handle LLM auto-installation and status commands."""
-    from safeclaw.core.llm_installer import auto_setup, get_status
+    """Handle AI setup — enter your key or install local AI."""
+    from safeclaw.core.llm_installer import auto_setup
 
-    raw = params.get("raw_input", "").lower()
+    raw = params.get("raw_input", "")
 
-    if "status" in raw:
-        return get_status()
-
-    # Extract model preference
-    model = "default"
-    for preset in ["small", "large", "coding", "writing"]:
-        if preset in raw:
-            model = preset
+    # Extract everything after the trigger keyword
+    arg = ""
+    for keyword in ["setup ai", "install llm", "install ai", "install ollama",
+                     "setup llm", "setup ollama", "llm status", "ai status",
+                     "llm setup", "ai setup", "local ai", "get ollama"]:
+        lower = raw.lower()
+        if keyword in lower:
+            idx = lower.index(keyword) + len(keyword)
+            arg = raw[idx:].strip()
             break
 
-    # Check if a specific model name was given (e.g., "install llm mistral")
-    for keyword in ["install llm", "install ai", "install ollama",
-                     "setup llm", "setup ai", "setup ollama"]:
-        if keyword in raw:
-            remainder = raw.split(keyword, 1)[-1].strip()
-            if remainder and remainder not in ("status", "help"):
-                model = remainder
-            break
+    # "llm status" / "ai status" → pass "status"
+    if "status" in raw.lower() and not arg:
+        arg = "status"
 
     return await auto_setup(
-        model=model,
+        arg=arg,
         config_path=engine.config_path,
     )
 

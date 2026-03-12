@@ -47,8 +47,8 @@ class CLIChannel(BaseChannel):
                 "[dim]Every huge milestone, we add something new.[/dim]\n"
                 "[bold cyan]NEW:[/bold cyan] [white]Real Research + Auto LLM + Smart Learning[/white]\n"
                 "[dim]arXiv & Semantic Scholar papers, Wolfram Alpha,[/dim]\n"
-                "[dim]one-command LLM installer, auto-learning from[/dim]\n"
-                "[dim]your mistakes (typos, word-numbers, corrections).[/dim]\n"
+                "[dim]setup ai <your-key> instant config, auto-learning[/dim]\n"
+                "[dim]from your mistakes (typos, word-numbers, corrections).[/dim]\n"
                 "[dim]Type[/dim] [bold]help[/bold] [dim]to see all commands.[/dim]\n"
                 "\n"
                 "[dim]Next milestone:[/dim] [bold]500 stars[/bold] [yellow]:exploding_head:[/yellow]",
@@ -61,9 +61,9 @@ class CLIChannel(BaseChannel):
         self.console.print(
             Panel.fit(
                 "[bold green]SafeClaw[/bold green] - Privacy-first automation assistant\n"
-                "Type [bold]install llm[/bold] to auto-setup local AI, "
+                "Type [bold]setup ai <your-key>[/bold] to configure AI, "
                 "[bold]research <topic>[/bold] for arXiv/Scholar,\n"
-                "[bold]research wolfram <query>[/bold] for Wolfram Alpha, "
+                "[bold]setup ai local[/bold] for free local AI, "
                 "[bold]help[/bold] for all commands",
                 border_style="green",
             )

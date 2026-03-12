@@ -1,8 +1,8 @@
 # SafeClaw 🐾
 
-**The zero-cost alternative to OpenClaw. No LLM. No API bills. No prompt injection. Runs on any machine.**
+**The zero-cost alternative to OpenClaw. No LLM required. No API bills. Minimal attack surface. Runs on any machine.**
 
-> **250 STARS** — We hit 250 stars on GitHub! This milestone brings: **Real Research, Auto LLM Installer, and Smart Learning.** Research now searches arXiv and Semantic Scholar for real academic papers, asks Wolfram Alpha for computational answers, and still uses RSS as supplementary. `install llm` auto-sets up Ollama with one command. The parser now auto-corrects typos, converts word-numbers ("one" → 1), and learns from your mistakes automatically. [See the new features below.](#-real-research-sources) Previous milestone: [Fuzzy Learning & Personalization.](#-writing-style-profiler) Next milestone: **500 stars** 🤯
+> **250 STARS** — We hit 250 stars on GitHub! This milestone brings: **Real Research, Simple AI Setup, and Smart Learning.** Research now searches arXiv and Semantic Scholar for real academic papers, asks Wolfram Alpha for computational answers. `setup ai sk-ant-your-key` instantly configures Anthropic (or any provider) — or `setup ai local` for free Ollama. The parser auto-corrects typos, converts word-numbers ("one" → 1), and learns from your mistakes automatically. [See the new features below.](#-real-research-sources) Previous milestone: [Fuzzy Learning & Personalization.](#-writing-style-profiler) Next milestone: **500 stars** 🤯
 
 While OpenClaw users are burning [$200/day](https://www.notebookcheck.net/Free-to-use-AI-tool-can-burn-through-hundreds-of-Dollars-per-day-OpenClaw-has-absurdly-high-token-use.1219925.0.html) and [$3,600/month](https://dev.to/thegdsks/i-tried-the-free-ai-agent-with-124k-github-stars-heres-my-500-reality-check-2885) on API tokens, SafeClaw delivers 90% of the functionality using traditional programming — rule-based parsing, ML pipelines, and local-first tools. **Your API bill: $0. Forever.**
 
@@ -16,7 +16,7 @@ SafeClaw uses VADER, spaCy, sumy, YOLO, Whisper, Piper, and other battle-tested 
 |---|---|---|
 | **Monthly cost** | **$0** | $100–$3,600+ |
 | **Requires LLM** | No (optional for AI blog) | Yes |
-| **Prompt injection risk** | **None** | Yes |
+| **Prompt injection risk** | **Minimal** (only if LLM research enabled) | Yes (everywhere) |
 | **Works offline** | **Yes** (core features) | No |
 | **Runs on any machine** | **Yes** (Linux, macOS, Windows) | Needs powerful hardware or cloud APIs |
 | **Deterministic output** | **Yes** | No (LLM responses vary) |
@@ -49,11 +49,11 @@ SafeClaw uses VADER, spaCy, sumy, YOLO, Whisper, Piper, and other battle-tested 
 * **Auto-summarization** — Extractive summaries with sumy (no AI)
 * **Per-user preferences** — Customize your news sources
 
-### 🔒 Privacy First
+### 🔒 Privacy & Security
 * **Self-hosted by default** — Your data stays local unless you explicitly request external info (like weather)
 * **No API keys required** — Core features work completely offline
 * **No cloud AI dependencies** — No tokens sent to OpenAI, Anthropic, or Google
-* **No prompt injection** — No LLM means no injection attacks
+* **Minimal prompt injection surface** — Core features (blogging, coding, commands) use rule-based parsing with zero LLM, so they're immune to prompt injection. Research and deep analysis *can* optionally use an LLM to synthesize sources — when enabled, content from external sources (arXiv abstracts, web pages) is fed to the LLM, which carries a minimal prompt injection risk. Phase 1 research (gathering/summarizing) never uses an LLM and is safe. We're transparent about this tradeoff.
 
 ### 📡 Multi-Channel
 * **CLI** — Interactive command line with Rich formatting
@@ -109,12 +109,12 @@ SafeClaw uses VADER, spaCy, sumy, YOLO, Whisper, Piper, and other battle-tested 
 * **Smart routing** — `research <topic>` searches all sources at once, or use `research arxiv`, `research scholar`, `research wolfram` individually
 * **Two-phase pipeline** — Phase 1 gathers from real research sources ($0), Phase 2 does optional LLM deep analysis
 
-### 🤖 Auto LLM Installer
-* **One command** — `install llm` detects your OS, installs Ollama, downloads a model, and configures SafeClaw
-* **Model presets** — `install llm small` (1.3GB), `install llm coding`, `install llm writing`
-* **Status check** — `llm status` shows what's installed and running
-* **Cross-platform** — Linux (curl), macOS (brew/curl), Windows (winget)
-* **Zero config** — After install, AI features just work
+### 🤖 Super Simple AI Setup
+* **Just enter your key** — `setup ai sk-ant-your-key` and you're done. Auto-detects Anthropic, OpenAI, Google, Groq
+* **Or go local** — `setup ai local` auto-installs Ollama, downloads a model, configures SafeClaw
+* **Model presets** — `setup ai local small` (1.3GB), `setup ai local coding`, `setup ai local writing`
+* **Status check** — `setup ai status` shows what's configured
+* **Zero config files** — No YAML editing needed, the command does it for you
 
 ### 🧠 Smart Input Learning
 * **Word-to-number** — Type "research select one two three" and SafeClaw understands "1 2 3"
@@ -190,7 +190,7 @@ SafeClaw uses VADER, spaCy, sumy, YOLO, Whisper, Piper, and other battle-tested 
 | No AI/LLM required | ✅ | ❌ |
 | Offline capable | ✅ | ❌ |
 | Zero API cost | ✅ | ❌ |
-| No prompt injection | ✅ | ❌ |
+| Prompt injection risk | **Minimal** (only LLM research) | Everywhere |
 | Privacy-first | ✅ (local by default) | ✅ |
 | Voice (STT/TTS) | ✅ (Whisper + Piper, local) | ✅ (ElevenLabs, paid API) |
 | Smart home control | ✅ | ✅ (via skills) |
@@ -219,7 +219,7 @@ SafeClaw uses VADER, spaCy, sumy, YOLO, Whisper, Piper, and other battle-tested 
 | Writing style learning | ✅ (statistical profiling) | ❌ |
 | Academic research (arXiv, Scholar) | ✅ (free, no API key) | ❌ |
 | Wolfram Alpha | ✅ (computational knowledge) | ❌ |
-| Auto LLM installer | ✅ (one command) | ❌ |
+| Simple AI setup (enter key or local) | ✅ (one command) | ❌ |
 | Auto-learning from mistakes | ✅ (word-to-number, typo correction) | ❌ |
 | Research pipeline | ✅ (two-phase, LLM optional) | ✅ (AI only) |
 | Code templates & tools | ✅ (7 templates, offline utils) | ❌ (requires AI) |
@@ -330,9 +330,9 @@ safeclaw --verbose
 > research scholar machine learning # Search Semantic Scholar
 > research wolfram integrate x^2   # Ask Wolfram Alpha
 > research select 1,2,3             # Pick sources to analyze
-> install llm                       # Auto-setup local AI (one command!)
-> install llm small                 # Install lightweight model
-> llm status                        # Check local AI status
+> setup ai sk-ant-your-key-here      # Enter your Anthropic key, done
+> setup ai local                    # Or auto-install Ollama (free!)
+> setup ai status                   # Check what's configured
 > code template python-class UserAuth Auth handler  # Generate boilerplate
 > code templates                    # List all 7 templates
 > code stats src/                   # Lines of code by language
@@ -407,11 +407,12 @@ safeclaw research sources          # View gathered sources
 safeclaw research select 1,2,3     # Pick sources for deep analysis
 safeclaw research analyze          # LLM deep dive (optional)
 
-# LLM Auto-Installer
-safeclaw install llm               # One-command Ollama setup
-safeclaw install llm small         # Install lightweight model
-safeclaw install llm coding        # Install coding-optimized model
-safeclaw llm status                # Check local AI status
+# AI Setup (super simple)
+safeclaw setup ai sk-ant-your-key  # Enter Anthropic key, done
+safeclaw setup ai sk-your-key      # Or OpenAI key
+safeclaw setup ai local            # Or auto-install Ollama (free)
+safeclaw setup ai local coding     # Install coding-optimized model
+safeclaw setup ai status           # Check your setup
 
 # Coding Toolbox
 safeclaw code templates            # List available templates

@@ -6,7 +6,7 @@ No GenAI required for core features. Optional AI for blogging, research, coding.
 
 250-Star Features:
 - Real research: arXiv, Semantic Scholar, Wolfram Alpha (no API key needed)
-- Auto LLM installer: one-command Ollama setup
+- Simple AI setup: enter your key or auto-install Ollama
 - Auto-learning: word-to-number, typo correction, learns from mistakes
 
 100-Star Features:

@@ -310,6 +310,10 @@ PHRASE_VARIATIONS = {
         "ai setup",
         "local ai",
         "get ollama",
+        "enter key",
+        "api key",
+        "set key",
+        "add key",
     ],
     "code": [
         "code",

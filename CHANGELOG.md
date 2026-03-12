@@ -16,12 +16,13 @@ Every huge milestone, we add something new. We just hit **250 stars!**
   - RSS feeds remain as supplementary sources
   - New commands: `research arxiv <query>`, `research scholar <query>`, `research wolfram <query>`
 
-- **Auto LLM Installer** — One-command local AI setup
-  - `install llm` detects your platform and installs Ollama automatically
-  - Auto-downloads a model, auto-configures SafeClaw
-  - Model presets: small (1.3GB), default (4.7GB), large (40GB), coding, writing
-  - `llm status` shows installation state and available models
-  - Works on Linux, macOS, and Windows
+- **Super Simple AI Setup** — Enter your key and go
+  - `setup ai sk-ant-...` — Auto-detects Anthropic, configures everything
+  - `setup ai sk-...` / `setup ai AI...` / `setup ai gsk_...` — OpenAI, Google, Groq
+  - `setup ai local` — Auto-installs Ollama, downloads model, configures SafeClaw
+  - `setup ai local coding/writing/small` — Model presets for different use cases
+  - `setup ai status` — Check what's configured
+  - No YAML editing needed — the command handles config.yaml for you
 
 - **Auto-Learning from User Mistakes** — Parser gets smarter over time
   - Word-to-number conversion: "select one two three" → "select 1 2 3"
