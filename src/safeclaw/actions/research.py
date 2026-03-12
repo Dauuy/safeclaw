@@ -99,6 +99,21 @@ class ResearchAction(BaseAction):
             summarize_items=True,
             max_items_per_feed=5,
         )
+        self.ai_writer = None
+        self._initialized = False
+
+    def _initialize(self, engine: "SafeClaw") -> None:
+        """Lazy-init: load AI writer from config (same pattern as BlogAction)."""
+        if self._initialized:
+            return
+        self._initialized = True
+        from safeclaw.core.ai_writer import AIWriter
+        if engine.config.get("ai_providers"):
+            self.ai_writer = AIWriter.from_config(engine.config)
+            task_providers = engine.config.get("task_providers", {})
+            research_provider = task_providers.get("research")
+            if research_provider and research_provider in self.ai_writer.providers:
+                self.ai_writer.set_active_provider(research_provider)
 
     async def execute(
         self,
@@ -108,6 +123,7 @@ class ResearchAction(BaseAction):
         engine: "SafeClaw",
     ) -> str:
         """Execute research action."""
+        self._initialize(engine)
         raw = params.get("raw_input", "").strip()
 
         # Parse subcommand
@@ -182,7 +198,8 @@ class ResearchAction(BaseAction):
         session = ResearchSession(topic=topic)
         self._sessions[user_id] = session
 
-        lines = [f"**Researching: {topic}**", "", "Searching academic sources (no LLM)...", ""]
+        ai_note = f" + LLM ({self.ai_writer.get_active_provider().provider}/{self.ai_writer.get_active_provider().model})" if (self.ai_writer and self.ai_writer.get_active_provider()) else " (no LLM — run `research analyze` after for AI summary)"
+        lines = [f"**Researching: {topic}**", "", f"Searching academic sources{ai_note}...", ""]
 
         # Get Wolfram Alpha app_id from config if available
         wolfram_app_id = engine.config.get("apis", {}).get("wolfram_alpha", "")
@@ -590,16 +607,11 @@ class ResearchAction(BaseAction):
             + "\n---\n".join(source_texts)
         )
 
-        # Get the research LLM (per-task routing)
-        from safeclaw.core.ai_writer import AIWriter
         from safeclaw.core.prompt_builder import PromptBuilder
         from safeclaw.core.writing_style import load_writing_profile
 
-        task_providers = engine.config.get("task_providers", {})
-        research_provider = task_providers.get("research")
-
-        ai_writer = AIWriter.from_config(engine.config)
-        if not ai_writer.providers:
+        ai_writer = self.ai_writer
+        if not ai_writer or not ai_writer.providers:
             combined = "\n\n".join(s.content for s in selected if s.content)
             if combined:
                 extractive = self._summarizer.summarize(combined, sentences=10)
@@ -609,8 +621,7 @@ class ResearchAction(BaseAction):
                     f"**Research Summary (extractive, no LLM):**\n\n"
                     f"{extractive}\n\n"
                     "---\n"
-                    "For AI-powered deep analysis, configure an LLM provider in config.yaml\n"
-                    "under `task_providers.research` or `ai_providers`."
+                    "For AI-powered deep analysis, run: `setup ai sk-ant-your-key`"
                 )
             return "No content available for analysis."
 
@@ -625,7 +636,6 @@ class ResearchAction(BaseAction):
 
         response = await ai_writer.generate(
             prompt=prompt,
-            provider_label=research_provider,
             system_prompt=system_prompt,
         )
 
