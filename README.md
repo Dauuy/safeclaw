@@ -14,13 +14,62 @@ SafeClaw uses VADER, spaCy, sumy, YOLO, Whisper, Piper, and other battle-tested 
 
 | | SafeClaw | OpenClaw |
 |---|---|---|
-| **Monthly cost** | **$0** | $100–$3,600+ |
-| **Requires LLM** | No (optional for AI blog/NLU) | Yes |
-| **Prompt injection risk** | **Minimal** (only if LLM NLU/research enabled) | Yes (everywhere) |
-| **Works offline** | **Yes** (core features) | No |
+| **Monthly cost by default** | **$0** | $100–$3,600+ | 
+| **Requires LLM** | No (optional for AI blogging, coding, and research all have no LLM options) | yes 
+| **Prompt injection risk** | **Minimal** (only if a url you go to is malicious) | Yes (everywhere) |
+| **Works offline** | **Yes** all default features, except weather | No |
 | **Runs on any machine** | **Yes** (Linux, macOS, Windows) | Needs powerful hardware or cloud APIs |
 | **Deterministic output** | **Yes** | No (LLM responses vary) |
-| **Privacy** | **Local by default** (external only when you ask, e.g. weather) | Data sent to API providers |
+| **Privacy** | **Local by default** (external only when you ask or setup an llm, e.g. weather) | Data always sent to API providers |
+
+
+## Full Comparison: SafeClaw vs OpenClaw
+
+| Feature | SafeClaw | OpenClaw |
+|---|---|---|
+| Self-hosted | ✅ | ✅ |
+| Cross-platform (Linux, macOS, Windows) | ✅ | ✅ |
+| No AI/LLM required | ✅ | ❌ |
+| Offline capable | ✅ | ❌ |
+| Zero API cost | ✅ | ❌ |
+| Prompt injection risk | **Minimal** (only LLM research) | Everywhere |
+| Privacy-first | ✅ (local by default) | ✅ |
+| Voice (STT/TTS) | ✅ (Whisper + Piper, local) | ✅ (ElevenLabs, paid API) |
+| Smart home control | ✅ | ✅ (via skills) |
+| Bluetooth control | ✅ | ❌ |
+| Network scanning | ✅ | ❌ |
+| Social media summaries | ✅ (Twitter, Mastodon, Bluesky) | ❌ (requires separate skills) |
+| Multi-channel | ✅ (CLI, Telegram, Webhooks) | ✅ (13+ platforms) |
+| Web crawling | ✅ | ✅ |
+| Summarization | ✅ (extractive) | ✅ (AI-generated) |
+| RSS/News feeds | ✅ (50+ feeds) | ✅ (via skills) |
+| Sentiment analysis | ✅ (VADER) | ✅ (AI) |
+| Email integration | ✅ | ✅ |
+| Calendar support | ✅ | ✅ |
+| Document reading | ✅ | ✅ |
+| Desktop notifications | ✅ | ✅ |
+| Object detection | ✅ (YOLO) | ❌ |
+| OCR | ✅ (Tesseract) | ❌ |
+| Cron jobs | ✅ | ✅ |
+| Webhooks | ✅ | ✅ |
+| Plugin system | ✅ | ✅ (5,700+ skills) |
+| Free-form chat | ❌ | ✅ |
+| Creative writing | ❌ | ✅ |
+| Blog with and without  LLM  | ✅ no llm (extractive titles) with LLM, AI blogging | ❌ (always requires AI) |   
+Blog publishing (WordPress, Joomla, SFTP) | ✅ | ❌ (requires plugins) |
+| Writing style learning | ✅ (statistical profiling) | ❌ |
+| Academic research (arXiv, Scholar) | ✅ (free, no API key) | ❌ |
+| Wolfram Alpha | ✅ (computational knowledge) | ❌ |
+| Simple  setup (enter key or local) simple telegram and blogging setup | ✅ (one command) | ❌ |
+| Auto-learning from mistakes | ✅ (word-to-number, typo correction) | ❌ |
+| Research pipeline | ✅ (two-phase, LLM optional) | ✅ (AI only) |
+| Code templates & tools | ✅ (7 templates, offline utils) | ❌ (requires AI) |
+| Auto-blog scheduling | ✅ (cron-based) | ❌ |
+| Task-aware prompts | ✅ (per-task LLM routing) | ✅ |
+| Command chaining | ✅ ("read email and remind me at 3pm") | ✅ |
+| Autonomous multi-step tasks | ❌ | ✅ |
+| Self-writing skills | ❌ | ✅ |
+| Browser automation | ❌ | ✅ |
 
 ---
 
@@ -214,54 +263,6 @@ handled entirely locally with zero tokens consumed.
 
 ---
 
-## Full Comparison: SafeClaw vs OpenClaw
-
-| Feature | SafeClaw | OpenClaw |
-|---|---|---|
-| Self-hosted | ✅ | ✅ |
-| Cross-platform (Linux, macOS, Windows) | ✅ | ✅ |
-| No AI/LLM required | ✅ | ❌ |
-| Offline capable | ✅ | ❌ |
-| Zero API cost | ✅ | ❌ |
-| Prompt injection risk | **Minimal** (only LLM research) | Everywhere |
-| Privacy-first | ✅ (local by default) | ✅ |
-| Voice (STT/TTS) | ✅ (Whisper + Piper, local) | ✅ (ElevenLabs, paid API) |
-| Smart home control | ✅ | ✅ (via skills) |
-| Bluetooth control | ✅ | ❌ |
-| Network scanning | ✅ | ❌ |
-| Social media summaries | ✅ (Twitter, Mastodon, Bluesky) | ❌ (requires separate skills) |
-| Multi-channel | ✅ (CLI, Telegram, Webhooks) | ✅ (13+ platforms) |
-| Web crawling | ✅ | ✅ |
-| Summarization | ✅ (extractive) | ✅ (AI-generated) |
-| RSS/News feeds | ✅ (50+ feeds) | ✅ (via skills) |
-| Sentiment analysis | ✅ (VADER) | ✅ (AI) |
-| Email integration | ✅ | ✅ |
-| Calendar support | ✅ | ✅ |
-| Document reading | ✅ | ✅ |
-| Desktop notifications | ✅ | ✅ |
-| Object detection | ✅ (YOLO) | ❌ |
-| OCR | ✅ (Tesseract) | ❌ |
-| Cron jobs | ✅ | ✅ |
-| Webhooks | ✅ | ✅ |
-| Plugin system | ✅ | ✅ (5,700+ skills) |
-| Free-form chat | ❌ | ✅ |
-| Creative writing | ❌ | ✅ |
-| Blog (no LLM) | ✅ (extractive titles) | ❌ (requires AI) |
-| Blog (AI-powered) | ✅ (optional, 11 providers) | ✅ |
-| Blog publishing (WordPress, Joomla, SFTP) | ✅ | ❌ (requires plugins) |
-| Writing style learning | ✅ (statistical profiling) | ❌ |
-| Academic research (arXiv, Scholar) | ✅ (free, no API key) | ❌ |
-| Wolfram Alpha | ✅ (computational knowledge) | ❌ |
-| Simple AI setup (enter key or local) | ✅ (one command) | ❌ |
-| Auto-learning from mistakes | ✅ (word-to-number, typo correction) | ❌ |
-| Research pipeline | ✅ (two-phase, LLM optional) | ✅ (AI only) |
-| Code templates & tools | ✅ (7 templates, offline utils) | ❌ (requires AI) |
-| Auto-blog scheduling | ✅ (cron-based) | ❌ |
-| Task-aware prompts | ✅ (per-task LLM routing) | ✅ |
-| Command chaining | ✅ ("read email and remind me at 3pm") | ✅ |
-| Autonomous multi-step tasks | ❌ | ✅ |
-| Self-writing skills | ❌ | ✅ |
-| Browser automation | ❌ | ✅ |
 
 ---
 
