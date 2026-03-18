@@ -432,7 +432,7 @@ class SafeClaw:
 
         help_lines.extend([
             "",
-            "250-Star Features:",
+            " one hundred-Star Features:",
             "  • research <topic>     — Search arXiv, Semantic Scholar, Wolfram Alpha",
             "  • research arxiv <q>   — Search arXiv papers directly",
             "  • research scholar <q> — Search Semantic Scholar papers",
