@@ -803,6 +803,130 @@ async def _blog(action: str, content: list[str] | None) -> None:
 
 
 @app.command()
+def publish(
+    title: str = typer.Option(..., "--title", "-t", help="Blog post title"),
+    file: Path | None = typer.Option(None, "--file", "-f", help="Path to content file"),
+    content: str | None = typer.Option(None, "--content", "-c", help="Content as a string"),
+    target: str | None = typer.Option(None, "--target", help="Named publish target from config"),
+    sftp_host: str | None = typer.Option(None, "--sftp-host", help="SFTP host"),
+    sftp_port: int = typer.Option(22, "--sftp-port", help="SFTP port"),
+    sftp_user: str = typer.Option("", "--sftp-user", help="SFTP username"),
+    sftp_password: str = typer.Option("", "--sftp-password", help="SFTP password"),
+    sftp_key: str = typer.Option("", "--sftp-key", help="Path to SSH private key"),
+    sftp_path: str = typer.Option("/var/www/html/blog", "--sftp-path", help="Remote directory"),
+    config: Path | None = typer.Option(None, "--config", help="Config file path"),
+    verbose: bool = typer.Option(False, "--verbose"),
+):
+    """Publish a blog post to SFTP (or other configured targets) non-interactively."""
+    setup_logging(verbose)
+    asyncio.run(_publish(
+        title=title,
+        file=file,
+        content_str=content,
+        target=target,
+        sftp_host=sftp_host,
+        sftp_port=sftp_port,
+        sftp_user=sftp_user,
+        sftp_password=sftp_password,
+        sftp_key=sftp_key,
+        sftp_path=sftp_path,
+        config_path=config,
+    ))
+
+
+async def _publish(
+    title: str,
+    file: Path | None,
+    content_str: str | None,
+    target: str | None,
+    sftp_host: str | None,
+    sftp_port: int,
+    sftp_user: str,
+    sftp_password: str,
+    sftp_key: str,
+    sftp_path: str,
+    config_path: Path | None,
+) -> None:
+    """Run a non-interactive publish to SFTP or configured targets."""
+    import re
+
+    import yaml
+
+    from safeclaw.core.blog_publisher import BlogPublisher, PublishTarget, PublishTargetType
+
+    # Resolve content
+    body = ""
+    if file:
+        if not file.exists():
+            console.print(f"[red]File not found: {file}[/red]")
+            raise typer.Exit(1)
+        body = file.read_text()
+    elif content_str:
+        body = content_str
+    else:
+        console.print("[red]Provide content via --file or --content.[/red]")
+        raise typer.Exit(1)
+
+    if not body.strip():
+        console.print("[red]Content is empty.[/red]")
+        raise typer.Exit(1)
+
+    # Build publisher — start from config if available
+    if config_path and config_path.exists():
+        raw_config = yaml.safe_load(config_path.read_text()) or {}
+        publisher = BlogPublisher.from_config(raw_config)
+    else:
+        publisher = BlogPublisher()
+
+    # If inline SFTP flags were given, add/override that target
+    if sftp_host:
+        inline = PublishTarget(
+            label=f"sftp-{sftp_host}",
+            target_type=PublishTargetType.SFTP,
+            sftp_host=sftp_host,
+            sftp_port=sftp_port,
+            sftp_user=sftp_user,
+            sftp_password=sftp_password,
+            sftp_key_path=sftp_key,
+            sftp_remote_path=sftp_path,
+        )
+        publisher.add_target(inline)
+
+    if not publisher.targets:
+        console.print(
+            "[red]No publish targets found.[/red]\n"
+            "Provide --sftp-host (and credentials), or configure publish_targets in config.yaml."
+        )
+        raise typer.Exit(1)
+
+    slug = re.sub(r"[^\w\s-]", "", title)[:50].strip().replace(" ", "-").lower()
+    excerpt = body[:160].strip()
+
+    console.print(f"[dim]Publishing \"{title}\" → {target or 'all targets'}…[/dim]")
+
+    results = await publisher.publish(
+        title=title,
+        content=body,
+        target_label=target,
+        excerpt=excerpt,
+        slug=slug,
+    )
+
+    any_success = False
+    for r in results:
+        if r.success:
+            any_success = True
+            console.print(f"[green]✓ {r.target_label} ({r.target_type}): {r.message}[/green]")
+            if r.url:
+                console.print(f"  [blue]{r.url}[/blue]")
+        else:
+            console.print(f"[red]✗ {r.target_label} ({r.target_type}): {r.error}[/red]")
+
+    if not any_success:
+        raise typer.Exit(1)
+
+
+@app.command()
 def init(
     path: Path = typer.Argument(Path("."), help="Directory to initialize"),
 ):
