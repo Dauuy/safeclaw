@@ -354,10 +354,6 @@ async def run_asana_cycle(engine: "SafeClaw") -> None:
                 if stype != "comment" and "comment" not in subtype:
                     seen_story_set.add(rgid)
                     continue
-                author_gid = str((story.get("created_by") or {}).get("gid") or "")
-                if author_gid == user_gid:
-                    seen_story_set.add(rgid)
-                    continue
                 if not _story_mentions_user(story, user_gid):
                     seen_story_set.add(rgid)
                     continue
