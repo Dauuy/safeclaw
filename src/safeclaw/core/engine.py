@@ -4,6 +4,8 @@ SafeClaw Core Engine - The main event loop and orchestrator.
 Coordinates channels, actions, triggers, and the command parser.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from collections.abc import Callable
@@ -375,7 +377,10 @@ class SafeClaw:
             except Exception as e:
                 logger.warning(f"Blog scheduler init failed: {e}")
 
-        # Start all enabled channels
+        extra_tasks: list[asyncio.Task[Any]] = []
+        if self._asana_feed_enabled():
+            extra_tasks.append(asyncio.create_task(self._asana_background_loop()))
+
         channel_tasks = []
         for name, channel in self.channels.items():
             if hasattr(channel, "start"):
@@ -384,7 +389,7 @@ class SafeClaw:
 
         # Main event loop
         try:
-            await asyncio.gather(*channel_tasks)
+            await asyncio.gather(*channel_tasks, *extra_tasks)
         except asyncio.CancelledError:
             logger.info("SafeClaw shutting down...")
         finally:
@@ -408,6 +413,28 @@ class SafeClaw:
         await self.memory.close()
 
         logger.info("SafeClaw stopped.")
+
+    def _asana_feed_enabled(self) -> bool:
+        c = self.config.get("asana") or {}
+        return bool(c.get("enabled"))
+
+    async def _asana_background_loop(self) -> None:
+        await asyncio.sleep(15)
+        while self.running:
+            cfg = self.config.get("asana") or {}
+            interval = max(30, int(cfg.get("interval_seconds") or 120))
+            try:
+                from safeclaw.core.asana_feed import run_asana_cycle
+
+                await run_asana_cycle(self)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.exception("Asana feed error: %s", e)
+            try:
+                await asyncio.sleep(interval)
+            except asyncio.CancelledError:
+                break
 
     def get_help(self) -> str:
         """Return help text with available commands."""

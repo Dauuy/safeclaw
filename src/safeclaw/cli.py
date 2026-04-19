@@ -361,6 +361,7 @@ async def _run_all(
 ) -> None:
     """Run all configured channels."""
     engine = create_engine(config_path)
+    engine.load_config()
 
     # Add CLI channel
     cli_channel = CLIChannel(engine)
@@ -374,10 +375,23 @@ async def _run_all(
 
     # Add Telegram if enabled
     if enable_telegram:
-        token = engine.config.get("telegram", {}).get("token")
+        ch = engine.config.get("channels", {}).get("telegram", {})
+        root = engine.config.get("telegram", {})
+        token = ch.get("token") or root.get("token")
+        allowed = ch.get("allowed_users") or root.get("allowed_users")
         if token:
             from safeclaw.channels.telegram import TelegramChannel
-            telegram_channel = TelegramChannel(engine, token)
+
+            ids = None
+            if isinstance(allowed, list) and allowed:
+                tmp: list[int] = []
+                for x in allowed:
+                    try:
+                        tmp.append(int(x))
+                    except (TypeError, ValueError):
+                        continue
+                ids = tmp or None
+            telegram_channel = TelegramChannel(engine, token, allowed_users=ids)
             engine.register_channel("telegram", telegram_channel)
         else:
             console.print("[yellow]Telegram token not configured[/yellow]")
@@ -993,6 +1007,15 @@ memory:
 apis:
   openweathermap: ""  # For weather in briefings
   newsapi: ""  # For news in briefings
+
+# Asana workspace feed (no webhook): all projects + My Tasks + assignee=me
+# asana:
+#   enabled: true
+#   workspace_gid: "YOUR_WORKSPACE_GID"
+#   pat: ""  # or set env ASANA_PAT
+#   user_gid: ""  # optional; default: /users/me
+#   notify_telegram_chat_id: "123456789"  # or omit if allowed_users is a single id
+#   interval_seconds: 120
 
 # Per-task LLM routing (100-star feature)
 # task_providers:
