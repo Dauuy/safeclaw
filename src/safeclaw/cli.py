@@ -373,12 +373,12 @@ async def _run_all(
         webhook_server = WebhookServer()
         engine.register_channel("webhook", webhook_server)
 
-    # Add Telegram if enabled
-    if enable_telegram:
-        ch = engine.config.get("channels", {}).get("telegram", {})
-        root = engine.config.get("telegram", {})
-        token = ch.get("token") or root.get("token")
-        allowed = ch.get("allowed_users") or root.get("allowed_users")
+    ch = engine.config.get("channels", {}).get("telegram", {})
+    root = engine.config.get("telegram", {})
+    token = str(ch.get("token") or root.get("token") or "").strip()
+    allowed = ch.get("allowed_users") or root.get("allowed_users")
+    yaml_telegram = bool(ch.get("enabled")) and bool(token)
+    if enable_telegram or yaml_telegram:
         if token:
             from safeclaw.channels.telegram import TelegramChannel
 
@@ -393,7 +393,7 @@ async def _run_all(
                 ids = tmp or None
             telegram_channel = TelegramChannel(engine, token, allowed_users=ids)
             engine.register_channel("telegram", telegram_channel)
-        else:
+        elif enable_telegram:
             console.print("[yellow]Telegram token not configured[/yellow]")
 
     await engine.start()

@@ -21,6 +21,19 @@ from safeclaw.core.scheduler import Scheduler
 logger = logging.getLogger(__name__)
 
 
+def _default_config_path() -> Path:
+    rel = Path("config/config.yaml")
+    if rel.exists():
+        return rel
+    for candidate in (
+        Path.home() / "config" / "config.yaml",
+        Path.home() / ".safeclaw" / "config.yaml",
+    ):
+        if candidate.exists():
+            return candidate
+    return rel
+
+
 class SafeClaw:
     """
     Main SafeClaw engine that orchestrates all components.
@@ -43,7 +56,7 @@ class SafeClaw:
         config_path: Path | None = None,
         data_dir: Path | None = None,
     ):
-        self.config_path = config_path or Path("config/config.yaml")
+        self.config_path = config_path if config_path is not None else _default_config_path()
         self.data_dir = data_dir or Path.home() / ".safeclaw"
         self.data_dir.mkdir(parents=True, exist_ok=True)
 

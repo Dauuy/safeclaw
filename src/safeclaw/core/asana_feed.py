@@ -2,9 +2,9 @@ import asyncio
 import json
 import logging
 import os
-from contextlib import contextmanager
+import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 import httpx
@@ -193,10 +193,19 @@ def _story_mentions_user(story: dict[str, Any], user_gid: str) -> bool:
     text = story.get("text") or ""
     if ug in html or ug in text:
         return True
-    if f'data-asana-gid="{ug}"' in html:
+    if f'data-asana-gid="{ug}"' in html or f"data-asana-gid='{ug}'" in html:
         return True
-    if f"data-asana-gid='{ug}'" in html:
+    if re.search(rf"data-asana-gid\s*=\s*[\"']?{re.escape(ug)}[\"']?", html):
         return True
+    if f"/0/{ug}/" in html or f"/0/{ug}/" in text:
+        return True
+    mentions = story.get("mentions")
+    if isinstance(mentions, list):
+        for m in mentions:
+            if isinstance(m, dict) and str(m.get("gid") or "") == ug:
+                return True
+            if isinstance(m, str) and m == ug:
+                return True
     return False
 
 
@@ -257,21 +266,6 @@ def _resource_key(kind: str, gid: str) -> str:
     return f"{kind}:{gid}"
 
 
-@contextmanager
-def _quiet_httpx_for_asana() -> Iterator[None]:
-    names = ("httpx", "httpcore")
-    prev: dict[str, int] = {}
-    for name in names:
-        lg = logging.getLogger(name)
-        prev[name] = lg.level
-        lg.setLevel(logging.WARNING)
-    try:
-        yield
-    finally:
-        for name in names:
-            logging.getLogger(name).setLevel(prev[name])
-
-
 async def run_asana_cycle(engine: "SafeClaw") -> None:
     cfg = engine.config.get("asana") or {}
     if not cfg.get("enabled"):
@@ -295,87 +289,86 @@ async def run_asana_cycle(engine: "SafeClaw") -> None:
         for k, v in raw.items():
             sync_map[str(k)] = v if v else None
 
-    with _quiet_httpx_for_asana():
-        async with httpx.AsyncClient() as client:
-            status_me, me_body = await _asana_get(
-                client, pat, "/users/me", {"opt_fields": "gid,name,email"}
+    async with httpx.AsyncClient() as client:
+        status_me, me_body = await _asana_get(
+            client, pat, "/users/me", {"opt_fields": "gid,name,email"}
+        )
+        if status_me != 200:
+            logger.warning("Asana /users/me failed: %s", status_me)
+            return
+        me = me_body.get("data") or {}
+        user_gid = str(cfg.get("user_gid") or me.get("gid") or "").strip()
+        if not user_gid:
+            return
+
+        projects = await _list_projects(client, pat, workspace_gid)
+        utl = await _utl_gid(client, pat, user_gid, workspace_gid)
+        resources: list[tuple[str, str]] = [("projects", p) for p in projects]
+        if utl:
+            resources.append(("user_task_lists", utl))
+
+        seen_stories = list(state.get("seen_story_gids") or [])
+        seen_story_set = set(seen_stories)
+        seen_tasks = list(state.get("seen_new_task_gids") or [])
+        bootstrap = not seen_tasks
+
+        new_task_seen, new_task_ids = await _poll_assignee_tasks(
+            client, pat, workspace_gid, seen_tasks
+        )
+        if bootstrap:
+            new_task_ids = []
+
+        for gid in new_task_ids:
+            name = "?"
+            st, tb = await _asana_get(
+                client, pat, f"/tasks/{quote(gid, safe='')}", {"opt_fields": "name"}
             )
-            if status_me != 200:
-                logger.warning("Asana /users/me failed: %s", status_me)
-                return
-            me = me_body.get("data") or {}
-            user_gid = str(cfg.get("user_gid") or me.get("gid") or "").strip()
-            if not user_gid:
-                return
+            if st == 200:
+                row = tb.get("data") or {}
+                name = row.get("name") or name
+            await _tg_send(client, tg_token, chat_id, _fmt_new_task(name, gid))
 
-            projects = await _list_projects(client, pat, workspace_gid)
-            utl = await _utl_gid(client, pat, user_gid, workspace_gid)
-            resources: list[tuple[str, str]] = [("projects", p) for p in projects]
-            if utl:
-                resources.append(("user_task_lists", utl))
-
-            seen_stories = list(state.get("seen_story_gids") or [])
-            seen_story_set = set(seen_stories)
-            seen_tasks = list(state.get("seen_new_task_gids") or [])
-            bootstrap = not seen_tasks
-
-            new_task_seen, new_task_ids = await _poll_assignee_tasks(
-                client, pat, workspace_gid, seen_tasks
-            )
-            if bootstrap:
-                new_task_ids = []
-
-            for gid in new_task_ids:
-                name = "?"
-                st, tb = await _asana_get(
-                    client, pat, f"/tasks/{quote(gid, safe='')}", {"opt_fields": "name"}
-                )
-                if st == 200:
-                    row = tb.get("data") or {}
-                    name = row.get("name") or name
-                await _tg_send(client, tg_token, chat_id, _fmt_new_task(name, gid))
-
-            for kind, gid in resources:
-                key = _resource_key(kind, gid)
-                prev = sync_map.get(key)
-                if prev == "__skip_events__":
-                    await asyncio.sleep(REQUEST_PAUSE_SEC)
-                    continue
-                events, new_sync = await _drain_events(client, pat, kind, gid, prev)
-                if new_sync is not None:
-                    sync_map[key] = new_sync
-                for ev in events:
-                    res = ev.get("resource") or {}
-                    rtype = (res.get("resource_type") or "").lower()
-                    rgid = str(res.get("gid") or "")
-                    if rtype != "story" or not rgid:
-                        continue
-                    if rgid in seen_story_set:
-                        continue
-                    story = await _get_story(client, pat, rgid)
-                    if not story:
-                        seen_story_set.add(rgid)
-                        continue
-                    stype = (story.get("type") or "").lower()
-                    subtype = (story.get("resource_subtype") or "").lower()
-                    if stype != "comment" and "comment" not in subtype:
-                        seen_story_set.add(rgid)
-                        continue
-                    author_gid = str((story.get("created_by") or {}).get("gid") or "")
-                    if author_gid == user_gid:
-                        seen_story_set.add(rgid)
-                        continue
-                    if not _story_mentions_user(story, user_gid):
-                        seen_story_set.add(rgid)
-                        continue
-                    seen_story_set.add(rgid)
-                    await _tg_send(client, tg_token, chat_id, _fmt_mention(story))
+        for kind, gid in resources:
+            key = _resource_key(kind, gid)
+            prev = sync_map.get(key)
+            if prev == "__skip_events__":
                 await asyncio.sleep(REQUEST_PAUSE_SEC)
+                continue
+            events, new_sync = await _drain_events(client, pat, kind, gid, prev)
+            if new_sync is not None:
+                sync_map[key] = new_sync
+            for ev in events:
+                res = ev.get("resource") or {}
+                rtype = (res.get("resource_type") or "").lower()
+                rgid = str(res.get("gid") or "")
+                if rtype != "story" or not rgid:
+                    continue
+                if rgid in seen_story_set:
+                    continue
+                story = await _get_story(client, pat, rgid)
+                if not story:
+                    seen_story_set.add(rgid)
+                    continue
+                stype = (story.get("type") or "").lower()
+                subtype = (story.get("resource_subtype") or "").lower()
+                if stype != "comment" and "comment" not in subtype:
+                    seen_story_set.add(rgid)
+                    continue
+                author_gid = str((story.get("created_by") or {}).get("gid") or "")
+                if author_gid == user_gid:
+                    seen_story_set.add(rgid)
+                    continue
+                if not _story_mentions_user(story, user_gid):
+                    seen_story_set.add(rgid)
+                    continue
+                seen_story_set.add(rgid)
+                await _tg_send(client, tg_token, chat_id, _fmt_mention(story))
+            await asyncio.sleep(REQUEST_PAUSE_SEC)
 
-            state["event_sync_by_resource"] = sync_map
-            state["seen_story_gids"] = _trim_seen(list(seen_story_set))
-            state["seen_new_task_gids"] = new_task_seen
-            _save_state(state_path, state)
+        state["event_sync_by_resource"] = sync_map
+        state["seen_story_gids"] = _trim_seen(list(seen_story_set))
+        state["seen_new_task_gids"] = new_task_seen
+        _save_state(state_path, state)
 
 
 def _resolve_telegram_target(engine: "SafeClaw", asana_cfg: dict[str, Any]) -> tuple[str, str]:
